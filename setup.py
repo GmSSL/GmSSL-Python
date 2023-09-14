@@ -14,6 +14,6 @@ from distutils.core import setup
 
 setup(
 	name='GmSSL-Python',
-	version='1.0',
+	version='2.0',
 	py_modules=['gmssl'],
 )
