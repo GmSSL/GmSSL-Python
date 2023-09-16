@@ -19,7 +19,7 @@ gmssl = cdll.LoadLibrary(libgmssl)
 libc = cdll.LoadLibrary(find_library('c'))
 
 
-GMSSL_PYTHON_VERSION = "2.0"
+GMSSL_PYTHON_VERSION = "2.1"
 
 
 def gmssl_version_num():
