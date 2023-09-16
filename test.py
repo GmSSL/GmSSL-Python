@@ -39,6 +39,14 @@ class TestGmSSL(unittest.TestCase):
 		mac = sm3_hmac.generateMac()
 		self.assertEqual(mac, bytes.fromhex(mac_hex))
 
+	def test_sm3_pbkdf2(self):
+		passwd = 'password'
+		salt = b'12345678'
+		iterator = 10000
+		keylen  = 32
+		key = sm3_pbkdf2(passwd, salt, iterator, keylen)
+		self.assertEqual(len(key), keylen)
+
 	def test_sm4(self):
 		key = b'1234567812345678'
 		plaintext = b'block of message'
@@ -143,6 +151,90 @@ class TestGmSSL(unittest.TestCase):
 		verify.update(b'abc')
 		verify_ret = verify.verify(sig)
 		self.assertTrue(verify_ret)
+
+	def test_sm9_enc(self):
+		master_key = Sm9EncMasterKey()
+		master_key.generate_master_key()
+		master_key.export_encrypted_master_key_info_pem('enc_msk.pem', 'password')
+		master_key.export_public_master_key_pem('enc_mpk.pem')
+
+		master_pub = Sm9EncMasterKey()
+		master_pub.import_public_master_key_pem('enc_mpk.pem')
+		ciphertext = master_pub.encrypt(b'plaintext', 'Alice')
+
+		master = Sm9EncMasterKey()
+		master.import_encrypted_master_key_info_pem('enc_msk.pem', 'password')
+
+		key = master.extract_key('Alice')
+		plaintext = key.decrypt(ciphertext)
+		self.assertEqual(plaintext, b'plaintext')
+
+	def test_sm9_sign(self):
+		master_key = Sm9SignMasterKey()
+		master_key.generate_master_key()
+		master_key.export_encrypted_master_key_info_pem('sign_msk.pem', 'password')
+		master_key.export_public_master_key_pem('sign_mpk.pem')
+
+
+		master = Sm9SignMasterKey()
+		master.import_encrypted_master_key_info_pem('sign_msk.pem', 'password')
+
+		key = master.extract_key('Alice')
+
+		sign = Sm9Signature(True)
+		sign.update(b'message')
+		sig = sign.sign(key)
+
+		master_pub = Sm9SignMasterKey()
+		master_pub.import_public_master_key_pem('sign_mpk.pem')
+
+		verify = Sm9Signature(False)
+		verify.update(b'message')
+		ret = verify.verify(sig, master_pub, 'Alice')
+		self.assertTrue(ret)
+
+	def test_sm2_cert(self):
+		cert_txt = '''-----BEGIN CERTIFICATE-----
+MIIBszCCAVegAwIBAgIIaeL+wBcKxnswDAYIKoEcz1UBg3UFADAuMQswCQYDVQQG
+EwJDTjEOMAwGA1UECgwFTlJDQUMxDzANBgNVBAMMBlJPT1RDQTAeFw0xMjA3MTQw
+MzExNTlaFw00MjA3MDcwMzExNTlaMC4xCzAJBgNVBAYTAkNOMQ4wDAYDVQQKDAVO
+UkNBQzEPMA0GA1UEAwwGUk9PVENBMFkwEwYHKoZIzj0CAQYIKoEcz1UBgi0DQgAE
+MPCca6pmgcchsTf2UnBeL9rtp4nw+itk1Kzrmbnqo05lUwkwlWK+4OIrtFdAqnRT
+V7Q9v1htkv42TsIutzd126NdMFswHwYDVR0jBBgwFoAUTDKxl9kzG8SmBcHG5Yti
+W/CXdlgwDAYDVR0TBAUwAwEB/zALBgNVHQ8EBAMCAQYwHQYDVR0OBBYEFEwysZfZ
+MxvEpgXBxuWLYlvwl3ZYMAwGCCqBHM9VAYN1BQADSAAwRQIgG1bSLeOXp3oB8H7b
+53W+CKOPl2PknmWEq/lMhtn25HkCIQDaHDgWxWFtnCrBjH16/W3Ezn7/U/Vjo5xI
+pDoiVhsLwg==
+-----END CERTIFICATE-----'''
+
+		with open('ROOTCA2.pem', 'w') as file:
+			file.write(cert_txt)
+			file.close()
+
+
+		cert = Sm2Certificate()
+		cert.import_pem('ROOTCA2.pem')
+
+		serial = cert.get_serial_number()
+		#print(serial.hex())
+
+		not_before = cert.get_not_before()
+		#print(not_before)
+
+		not_after = cert.get_not_after()
+		#print(not_after)
+
+		public_key = cert.get_subject_public_key()
+		public_key.export_public_key_info_pem('public_key.pem')
+
+		issuer = cert.get_issuer()
+		#print(issuer)
+
+		subject = cert.get_subject()
+		#print(subject)
+
+		ret = cert.verify_by_ca_certificate(cert, SM2_DEFAULT_ID)
+		self.assertTrue(ret)
 
 
 if __name__ == '__main__':
