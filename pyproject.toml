@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "gmssl_python"
+version = "2.2.0"
+authors = [
+  { name="Zhi Guan", email="guan@pku.edu.cn" },
+]
+description = "Python binding of the GmSSL library with ctypes"
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://gmssl.github.io/GmSSL-Python/"
+"Bug Tracker" = "https://github.com/GmSSL/GmSSL-Python/issues"
