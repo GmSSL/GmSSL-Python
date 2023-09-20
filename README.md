@@ -2,7 +2,7 @@
 
 ## 简介
 
-`gmssl-python`是GmSSL密码库（https://gmssl.com/guanzhi/GmSSL）的Python语言封装，以`ctypes`方式实现，通过Python类和函数提供了如下密码接口：
+`gmssl-python`是GmSSL密码库 https://github.com/guanzhi/GmSSL 的Python语言封装，以`ctypes`方式实现，通过Python类和函数提供了如下密码接口：
 
 * 密码随机数生成器
 * SM2加密和签名，SM2密钥生成、私钥口令加密保护、密钥PEM文件导入导出
