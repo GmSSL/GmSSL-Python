@@ -62,8 +62,6 @@ $ pip show gmssl-python
 
 解压缩并进入源代码目录`GmSSL-Python-main`。由于最新代码可能还处于开发过程中，在安装前必须进行测试确保全部功能正确，`gmssl-python`中提供了测试，执行如下命令
 
-在安装过程中会产生`deprecated`警告，对于Python 3.11及之前的版本可忽略此警告，并可以顺利编译完成。
-
 运行测试
 
 ```bash
@@ -123,3 +121,130 @@ echo -n abc | gmssl sm3
 ```
 
 可以看到输出相同的SM3哈希值
+
+
+
+
+
+## 开发手册
+
+### 随机数生成器
+
+函数`rand_bytes`实现随机数生成功能。
+
+```python
+rand_bytes(size : int) -> bytes
+```
+
+输入参数`size` 是输出字节数组长度，返回值为`size`长度的随机字节数组。
+
+通过`rand_bytes`方法生成的是具备密码安全性的随机数，可以用于密钥、IV或者其他随机数生成器的随机种子。
+
+```python
+>>> import gmssl
+>>> key = gmssl.rand_bytes(16)
+>>> print(key.hex())
+```
+
+`rand_bytes`是通过调用操作系统的密码随机数生成器（如`/dev/urandom`）实现的。由于底层操作系统的限制，在一次调用`rand_bytes`时不要指定明显超过密钥长度的输出长度，例如参数`size`的值不要超过128，否则可能导致阻塞，或者产生错误和异常。如果应用需要大量的随机数据，不应使用`rand_bytes`，而是应该考虑其他伪随机数生成算法。
+
+需要注意的是，`rand_bytes`的安全性依赖于底层的操作系统随机数生成器的安全性。在服务器、笔记本等主流硬件和Windows、Linux、Mac主流服务器、桌面操作系统环境上，当计算机已经启动并且经过一段时间的用户交互和网络通信后，`rand_bytes`可以输出高质量的随机数。但是在缺乏用户交互和网络通信的嵌入式设备中，`rand_bytes`返回的随机数可能存在随机性不足的问题，在这些特殊的环境中，开发者需要提前或在运行时检测`rand_bytes`是否能够提供具有充分的随机性。
+
+### SM3哈希
+
+SM3密码杂凑函数可以将任意长度的输入数据计算为固定32字节长度的哈希值。
+
+模块`gmssl`中包含如下SM3的常量
+
+* `SM3_DIGEST_SIZE` 即SM3哈希值的字节长度
+
+类`Sm3`实现了SM3功能，类`Sm3`的对象是由构造函数生成的
+
+```
+gmssl.Sm3()
+```
+
+对象sm3的方法：
+
+* `sm3.update(data : bytes)` 要哈希的消息是通过`update`方法输入的，输入`data`的数据类型是`bytes`类型，如果输入的数据是字符串，需要通过字符串的`encode`方法转换成`bytes`，否则无法生成正确的哈希值。
+* `sm3.digest() -> bytes` 在通过`update`输入完所有消息后，就可以通过`digest`方法获得输出的哈希值，输出的结果类型为`bytes`类型，长度为`SM3_DIGEST_SIZE`。
+* `sm3.reset()` 在SM3对象完成一个消息的哈希后，可以通过`reset`方法重置对象状态，效果等同于构造函数，重置后可以通过`update`、`digest`计算新一个消息的哈希值。`reset`方法使得应用可以只创建一个`Sm3`的对象，计算任意数量的哈希值。
+
+下面的例子展示了如何通过类`Sm3`计算字符串的SM3哈希值。
+
+```Python
+>>> from gmssl import *
+>>> sm3 = Sm3()
+>>> sm3.update(b'abc')
+>>> sm3.digest().hex()
+```
+
+注意这里提供的消息字符串是`bytes`格式的。这个例子的源代码在`examples/sm3.py`文件中，编译并运行这个例子。
+
+```bash
+$ python examples/sm3.py
+```
+
+打印出的`66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0`就是字符串`abc`的哈希值。字符串`abc`的哈希值也是SM3标准文本中给出的第一个测试数据，通过对比标准文本可以确定这个哈希值是正确的。
+
+也可以通过`gmssl`命令行来验证`Sm3`类的计算是正确的。
+
+```bash
+$ echo -n abc | gmssl sm3
+66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0
+```
+
+可以看到输出的结果是一样。
+
+注意，如果将字符串`abc`写入到文本文件中，文本编辑器通常会在文本结尾处增加格外的结束符，如`0x0a`字符，那么计算出的哈希值将不是上面的结果，比如可能是`12d4e804e1fcfdc181ed383aa07ba76cc69d8aedcbb7742d6e28ff4fb7776c34`。如果命令`echo`不使用`-n`的参数，也会出现同样的错误。这是很多开发者在初次进行哈希函数开发时容易遇到的错误，哈希函数的安全性质保证，即使输入的消息只差一个比特，那么输出的哈希值也完全不同。
+
+如果需要哈希的数据来自于网络或者文件，那么应用可能需要多次读取才能获得全部的数据。在通过`Sm3`计算哈希值时，应用不需要通过保存一个缓冲区来保存全部的数据，而是可以通过多次调用`update`方法，将数据输入给`Sm3`对象，在数据全都输入完之后，最后调用`digest`方法得到全部数据的SM3哈希值。下面的代码片段展示了这一用法。
+
+```python
+>>> from gmssl import *
+>>> sm3 = Sm3()
+>>> sm3.update(b"Hello ")
+>>> sm3.update(b"world!")
+>>> dgst = sm3.digest()
+```
+
+这个例子中两次调用了`update`方法，效果等同于
+
+```python
+sm3.update(b"Hello world!");
+```
+
+注意，SM3算法也支持生成空数据的哈希值，因此下面的代码片段也是合法的。
+
+```java
+>>> from gmssl import *
+>>> sm3 = Sm3()
+>>> dgst = sm3.digest()
+```
+
+GmSSL-Python其他类的`update`方法通常也都提供了这种形式的接口。在输入完所有的数据之后，通过调用`digest`方法就可以获得所有输入数据的SM3哈希值了。`digest`方法输出的是长度为`SM3_DIGEST_SIZE`字节（即32字节）的二进制哈希值。
+
+如果应用要计算多组数据的不同SM3哈希值，可以通过`reset`方法重置`Sm3`对象的状态，然后可以再次调用`update`和`digest`方法计算新一组数据的哈希值。这样只需要一个`Sm3`对象就可以完成多组哈希值的计算。
+
+```python
+>>> from gmssl import *
+>>> sm3 = Sm3()
+>>> sm3.update(b"abc")
+>>> dgst1 = sm3.digest()
+>>>
+>>> sm3.reset()
+>>> sm3.update(b"Hello ")
+>>> sm3.update(b"world!")
+>>> dgst2 = sm3.digest()
+```
+
+GmSSL-Python的部分其他类也提供了`reset`方法。
+
+
+
+
+
+
+
+
+
