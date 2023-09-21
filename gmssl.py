@@ -953,7 +953,7 @@ class Sm2Certificate:
 		issuer_raw = create_string_buffer(issuer_len.value)
 		libc.memcpy(issuer_raw, issuer_ptr, issuer_len)
 
-		issuer = { "raw_data" : issuer_raw }
+		issuer = { "raw_data" : issuer_raw.raw }
 		gmssl_parse_name(issuer, issuer_ptr, issuer_len)
 		return issuer
 
@@ -965,7 +965,7 @@ class Sm2Certificate:
 		subject_raw = create_string_buffer(subject_len.value)
 		libc.memcpy(subject_raw, subject_ptr, subject_len)
 
-		subject = { "raw_data" : subject_raw }
+		subject = { "raw_data" : subject_raw.raw }
 		gmssl_parse_name(subject, subject_ptr, subject_len)
 		return subject
 
