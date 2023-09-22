@@ -19,9 +19,14 @@ gmssl = cdll.LoadLibrary(find_library("gmssl"))
 libc = cdll.LoadLibrary(find_library('c'))
 
 
-class InnerError(Exception):
+class NativeError(Exception):
 	'''
 	GmSSL libraray inner error
+	'''
+
+class StateError(Exception):
+	'''
+	Crypto state error
 	'''
 
 GMSSL_PYTHON_VERSION = "2.2.0"
@@ -124,7 +129,7 @@ def sm3_pbkdf2(passwd, salt, iterator, keylen):
 
 	if gmssl.pbkdf2_hmac_sm3_genkey(c_char_p(passwd), c_size_t(len(passwd)),
 		salt, c_size_t(len(salt)), c_size_t(iterator), c_size_t(keylen), key) != 1:
-		raise InnerError('libgmssl inner error')
+		raise NativeError('libgmssl inner error')
 
 	return key.raw
 
@@ -175,10 +180,10 @@ class Sm4Cbc(Structure):
 			raise ValueError('Invalid IV size')
 		if encrypt == DO_ENCRYPT:
 			if gmssl.sm4_cbc_encrypt_init(byref(self), key, iv) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		else:
 			if gmssl.sm4_cbc_decrypt_init(byref(self), key, iv) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		self._encrypt = encrypt
 
 	def update(self, data):
@@ -187,11 +192,11 @@ class Sm4Cbc(Structure):
 		if self._encrypt == DO_ENCRYPT:
 			if gmssl.sm4_cbc_encrypt_update(byref(self), data, c_size_t(len(data)),
 				outbuf, byref(outlen)) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		else:
 			if gmssl.sm4_cbc_decrypt_update(byref(self), data, c_size_t(len(data)),
 				outbuf, byref(outlen)) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		return outbuf[0:outlen.value]
 
 	def finish(self):
@@ -199,10 +204,10 @@ class Sm4Cbc(Structure):
 		outlen = c_size_t()
 		if self._encrypt == True:
 			if gmssl.sm4_cbc_encrypt_finish(byref(self), outbuf, byref(outlen)) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		else:
 			if gmssl.sm4_cbc_decrypt_finish(byref(self), outbuf, byref(outlen)) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		return outbuf[:outlen.value]
 
 
@@ -225,21 +230,21 @@ class Sm4Ctr(Structure):
 		if len(iv) != SM4_BLOCK_SIZE:
 			raise ValueError('Invalid IV size')
 		if gmssl.sm4_ctr_encrypt_init(byref(self), key, iv) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 
 	def update(self, data):
 		outbuf = create_string_buffer(len(data) + SM4_BLOCK_SIZE)
 		outlen = c_size_t()
 		if gmssl.sm4_ctr_encrypt_update(byref(self), data, c_size_t(len(data)),
 			outbuf, byref(outlen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		return outbuf[0:outlen.value]
 
 	def finish(self):
 		outbuf = create_string_buffer(SM4_BLOCK_SIZE)
 		outlen = c_size_t()
 		if gmssl.sm4_ctr_encrypt_finish(byref(self), outbuf, byref(outlen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		return outbuf[:outlen.value]
 
 
@@ -267,21 +272,21 @@ class Zuc(Structure):
 		if len(iv) != ZUC_IV_SIZE:
 			raise ValueError('Invalid IV size')
 		if gmssl.zuc_encrypt_init(byref(self), key, iv) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 
 	def update(self, data):
 		outbuf = create_string_buffer(len(data) + SM4_BLOCK_SIZE)
 		outlen = c_size_t()
 		if gmssl.zuc_encrypt_update(byref(self), data, c_size_t(len(data)),
 			outbuf, byref(outlen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		return outbuf[0:outlen.value]
 
 	def finish(self):
 		outbuf = create_string_buffer(SM4_BLOCK_SIZE)
 		outlen = c_size_t()
 		if gmssl.zuc_encrypt_finish(byref(self), outbuf, byref(outlen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		return outbuf[:outlen.value]
 
 
@@ -331,12 +336,12 @@ class Sm4Gcm(Structure):
 			if gmssl.sm4_gcm_encrypt_init(byref(self), key, c_size_t(len(key)),
 				iv, c_size_t(len(iv)), aad, c_size_t(len(aad)),
 				c_size_t(taglen)) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		else:
 			if gmssl.sm4_gcm_decrypt_init(byref(self), key, c_size_t(len(key)),
 				iv, c_size_t(len(iv)), aad, c_size_t(len(aad)),
 				c_size_t(taglen)) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		self._encrypt = encrypt
 
 	def update(self, data):
@@ -345,11 +350,11 @@ class Sm4Gcm(Structure):
 		if self._encrypt == DO_ENCRYPT:
 			if gmssl.sm4_gcm_encrypt_update(byref(self), data, c_size_t(len(data)),
 				outbuf, byref(outlen)) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		else:
 			if gmssl.sm4_gcm_decrypt_update(byref(self), data, c_size_t(len(data)),
 				outbuf, byref(outlen)) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		return outbuf[0:outlen.value]
 
 	def finish(self):
@@ -357,10 +362,10 @@ class Sm4Gcm(Structure):
 		outlen = c_size_t()
 		if self._encrypt == DO_ENCRYPT:
 			if gmssl.sm4_gcm_encrypt_finish(byref(self), outbuf, byref(outlen)) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		else:
 			if gmssl.sm4_gcm_decrypt_finish(byref(self), outbuf, byref(outlen)) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		return outbuf[:outlen.value]
 
 
@@ -394,7 +399,7 @@ class Sm2Key(Structure):
 
 	def generate_key(self):
 		if gmssl.sm2_key_generate(byref(self)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		self._has_public_key = True
 		self._has_private_key = True
 
@@ -406,7 +411,7 @@ class Sm2Key(Structure):
 
 	def compute_z(self, signer_id = SM2_DEFAULT_ID):
 		if self._has_public_key == False:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no public key')
 		signer_id = signer_id.encode('utf-8')
 		z = create_string_buffer(SM3_DIGEST_SIZE)
 		gmssl.sm2_compute_z(z, byref(self), c_char_p(signer_id), c_size_t(len(signer_id)))
@@ -414,12 +419,12 @@ class Sm2Key(Structure):
 
 	def export_encrypted_private_key_info_pem(self, path, passwd):
 		if self._has_private_key == False:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no private key')
 		libc.fopen.restype = c_void_p
 		fp = libc.fopen(path.encode('utf-8'), 'wb')
 		passwd = passwd.encode('utf-8')
 		if gmssl.sm2_private_key_info_encrypt_to_pem(byref(self), c_char_p(passwd), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 
 	def import_encrypted_private_key_info_pem(self, path, passwd):
@@ -427,43 +432,43 @@ class Sm2Key(Structure):
 		fp = libc.fopen(path.encode('utf-8'), 'rb')
 		passwd = passwd.encode('utf-8')
 		if gmssl.sm2_private_key_info_decrypt_from_pem(byref(self), c_char_p(passwd), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 		self._has_public_key = True
 		self._has_private_key = True
 
 	def export_public_key_info_pem(self, path):
 		if self._has_public_key == False:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no public key')
 		libc.fopen.restype = c_void_p
 		fp = libc.fopen(path.encode('utf-8'), 'wb')
 		if gmssl.sm2_public_key_info_to_pem(byref(self), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 
 	def import_public_key_info_pem(self, path):
 		libc.fopen.restype = c_void_p
 		fp = libc.fopen(path.encode('utf-8'), 'rb')
 		if gmssl.sm2_public_key_info_from_pem(byref(self), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 		self._has_public_key = True
 		self._has_private_key = False
 
 	def sign(self, dgst):
 		if self._has_private_key == False:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no private key')
 		if len(dgst) != SM3_DIGEST_SIZE:
 			raise ValueError('Invalid SM3 digest size')
 		sig = create_string_buffer(SM2_MAX_SIGNATURE_SIZE)
 		siglen = c_size_t()
 		if gmssl.sm2_sign(byref(self), dgst, sig, byref(siglen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		return sig[:siglen.value]
 
 	def verify(self, dgst, signature):
 		if self._has_public_key == False:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no public key')
 		if len(dgst) != SM3_DIGEST_SIZE:
 			raise ValueError('Invalid SM3 digest size')
 		if gmssl.sm2_verify(byref(self), dgst, signature, c_size_t(len(signature))) != 1:
@@ -472,24 +477,24 @@ class Sm2Key(Structure):
 
 	def encrypt(self, data):
 		if self._has_public_key == False:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no public key')
 		if len(data) > SM2_MAX_PLAINTEXT_SIZE:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		outbuf = create_string_buffer(SM2_MAX_CIPHERTEXT_SIZE)
 		outlen = c_size_t()
 		if gmssl.sm2_encrypt(byref(self), data, c_size_t(len(data)),
 			outbuf, byref(outlen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		return outbuf[:outlen.value]
 
 	def decrypt(self, ciphertext):
 		if self._has_private_key == False:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no private key')
 		outbuf = create_string_buffer(SM2_MAX_PLAINTEXT_SIZE)
 		outlen = c_size_t()
 		if gmssl.sm2_decrypt(byref(self), ciphertext, c_size_t(len(ciphertext))
 			, outbuf, byref(outlen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		return outbuf[:outlen.value]
 
 
@@ -509,38 +514,38 @@ class Sm2Signature(Structure):
 		signer_id = signer_id.encode('utf-8')
 		if sign == DO_SIGN:
 			if sm2_key.has_private_key() != True:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 			if gmssl.sm2_sign_init(byref(self), byref(sm2_key),
 				c_char_p(signer_id), c_size_t(len(signer_id))) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		else:
 			if sm2_key.has_public_key() != True:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 			if gmssl.sm2_verify_init(byref(self), byref(sm2_key),
 				c_char_p(signer_id), c_size_t(len(signer_id))) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		self._sign = sign
 
 	def update(self, data):
 		if self._sign == DO_SIGN:
 			if gmssl.sm2_sign_update(byref(self), data, c_size_t(len(data))) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		else:
 			if gmssl.sm2_verify_update(byref(self), data, c_size_t(len(data))) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 
 	def sign(self):
 		if self._sign != DO_SIGN:
-			raise InnerError('libgmssl inner error')
+			raise StateError('not sign state')
 		sig = create_string_buffer(SM2_MAX_SIGNATURE_SIZE)
 		siglen = c_size_t()
 		if gmssl.sm2_sign_finish(byref(self), sig, byref(siglen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		return sig[:siglen.value]
 
 	def verify(self, signature):
 		if self._sign != DO_VERIFY:
-			raise InnerError('libgmssl inner error')
+			raise StateError('not verify state')
 		if gmssl.sm2_verify_finish(byref(self), signature, c_size_t(len(signature))) != 1:
 			return False
 		return True
@@ -596,28 +601,28 @@ class Sm9EncKey(Structure):
 		fp = libc.fopen(path.encode('utf-8'), 'rb')
 		passwd = passwd.encode('utf-8')
 		if gmssl.sm9_enc_key_info_decrypt_from_pem(byref(self), c_char_p(passwd), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 		self._has_private_key = True
 
 	def export_encrypted_private_key_info_pem(self, path, passwd):
 		if self._has_private_key != True:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no private key')
 		libc.fopen.restype = c_void_p
 		fp = libc.fopen(path.encode('utf-8'), 'wb')
 		passwd = passwd.encode('utf-8')
 		if gmssl.sm9_enc_key_info_encrypt_to_pem(byref(self), c_char_p(passwd), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 
 	def decrypt(self, ciphertext):
 		if self._has_private_key != True:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no private key')
 		plaintext = create_string_buffer(SM9_MAX_PLAINTEXT_SIZE)
 		outlen = c_size_t()
 		if gmssl.sm9_decrypt(byref(self), c_char_p(self._id), c_size_t(len(self._id)),
 			ciphertext, c_size_t(len(ciphertext)), plaintext, byref(outlen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		return plaintext[0:outlen.value]
 
 
@@ -633,18 +638,18 @@ class Sm9EncMasterKey(Structure):
 
 	def generate_master_key(self):
 		if gmssl.sm9_enc_master_key_generate(byref(self)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		self._has_public_key = True
 		self._has_private_key = True
 
 	def extract_key(self, identity):
 		if self._has_private_key != True:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no master key')
 		key = Sm9EncKey(identity)
 		identity = identity.encode('utf-8')
 		if gmssl.sm9_enc_master_key_extract_key(byref(self),
 			c_char_p(identity), c_size_t(len(identity)), byref(key)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		key._has_public_key = True
 		key._has_private_key = True
 		return key
@@ -654,48 +659,48 @@ class Sm9EncMasterKey(Structure):
 		fp = libc.fopen(path.encode('utf-8'), 'rb')
 		passwd = passwd.encode('utf-8')
 		if gmssl.sm9_enc_master_key_info_decrypt_from_pem(byref(self), c_char_p(passwd), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 		self._has_public_key = True
 		self._has_private_key = True
 
 	def export_encrypted_master_key_info_pem(self, path, passwd):
 		if self._has_private_key != True:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no master key')
 		libc.fopen.restype = c_void_p
 		fp = libc.fopen(path.encode('utf-8'), 'wb')
 		passwd = passwd.encode('utf-8')
 		if gmssl.sm9_enc_master_key_info_encrypt_to_pem(byref(self), c_char_p(passwd), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 
 	def export_public_master_key_pem(self, path):
 		if self._has_public_key != True:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no public master key')
 		libc.fopen.restype = c_void_p
 		fp = libc.fopen(path.encode('utf-8'), 'wb')
 		if gmssl.sm9_enc_master_public_key_to_pem(byref(self), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 
 	def import_public_master_key_pem(self, path):
 		libc.fopen.restype = c_void_p
 		fp = libc.fopen(path.encode('utf-8'), 'rb')
 		if gmssl.sm9_enc_master_public_key_from_pem(byref(self), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 		self._has_public_key = True
 		self._has_private_key = False
 
 	def encrypt(self, plaintext, to):
 		if self._has_public_key != True:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no public master key')
 		to = to.encode('utf-8')
 		ciphertext = create_string_buffer(SM9_MAX_CIPHERTEXT_SIZE)
 		outlen = c_size_t()
 		if gmssl.sm9_encrypt(byref(self), c_char_p(to), c_size_t(len(to)),
 			plaintext, c_size_t(len(plaintext)), ciphertext, byref(outlen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		return ciphertext[0:outlen.value]
 
 
@@ -720,18 +725,18 @@ class Sm9SignKey(Structure):
 		fp = libc.fopen(path.encode('utf-8'), 'rb')
 		passwd = passwd.encode('utf-8')
 		if gmssl.sm9_sign_key_info_decrypt_from_pem(byref(self), c_char_p(passwd), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 		self._has_private_key = True
 
 	def export_encrypted_private_key_info_pem(self, path, passwd):
 		if self._has_private_key == False:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no master key')
 		libc.fopen.restype = c_void_p
 		fp = libc.fopen(path.encode('utf-8'), 'wb')
 		passwd = passwd.encode('utf-8')
 		if gmssl.sm9_sign_key_info_encrypt_to_pem(byref(self), c_char_p(passwd), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 
 
@@ -747,18 +752,18 @@ class Sm9SignMasterKey(Structure):
 
 	def generate_master_key(self):
 		if gmssl.sm9_sign_master_key_generate(byref(self)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		self._has_public_key = True
 		self._has_private_key = True
 
 	def extract_key(self, identity):
 		if self._has_private_key != True:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no master key')
 		key = Sm9SignKey(identity)
 		identity = identity.encode('utf-8')
 		if gmssl.sm9_sign_master_key_extract_key(byref(self),
 			c_char_p(identity), c_size_t(len(identity)), byref(key)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		key._has_public_key = True
 		key._has_private_key = True
 		return key
@@ -769,36 +774,36 @@ class Sm9SignMasterKey(Structure):
 		passwd = passwd.encode('utf-8')
 		if gmssl.sm9_sign_master_key_info_decrypt_from_pem(byref(self),
 			c_char_p(passwd), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 		self._has_public_key = True
 		self._has_private_key = True
 
 	def export_encrypted_master_key_info_pem(self, path, passwd):
 		if self._has_private_key != True:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no master key')
 		libc.fopen.restype = c_void_p
 		fp = libc.fopen(path.encode('utf-8'), 'wb')
 		passwd = passwd.encode('utf-8')
 		if gmssl.sm9_sign_master_key_info_encrypt_to_pem(byref(self),
 			c_char_p(passwd), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 
 	def export_public_master_key_pem(self, path):
 		if self._has_public_key != True:
-			raise InnerError('libgmssl inner error')
+			raise TypeError('has no public master key')
 		libc.fopen.restype = c_void_p
 		fp = libc.fopen(path.encode('utf-8'), 'wb')
 		if gmssl.sm9_sign_master_public_key_to_pem(byref(self), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 
 	def import_public_master_key_pem(self, path):
 		libc.fopen.restype = c_void_p
 		fp = libc.fopen(path.encode('utf-8'), 'rb')
 		if gmssl.sm9_sign_master_public_key_from_pem(byref(self), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		libc.fclose(c_void_p(fp))
 		self._has_public_key = True
 		self._has_private_key = False
@@ -815,56 +820,55 @@ class Sm9Signature(Structure):
 	def __init__(self, sign = DO_SIGN):
 		if sign == DO_SIGN:
 			if gmssl.sm9_sign_init(byref(self)) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		else:
 			if gmssl.sm9_verify_init(byref(self)) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		self._sign = sign
 		self._inited = True
 
 
 	def reset(self):
 		if self._inited != True:
-			raise InnerError('libgmssl inner error')
+			raise StateError('not initialized')
 
 		if self._sign == DO_SIGN:
 			if gmssl.sm9_sign_init(byref(self)) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		else:
 			if gmssl.sm9_verify_init(byref(self)) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 
 	def update(self, data):
 
 		if self._inited != True:
-			raise InnerError('libgmssl inner error')
+			raise StateError('not initialized')
 
 		if self._sign == DO_SIGN:
 			if gmssl.sm9_sign_update(byref(self), data, c_size_t(len(data))) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 		else:
 			if gmssl.sm9_verify_update(byref(self), data, c_size_t(len(data))) != 1:
-				raise InnerError('libgmssl inner error')
+				raise NativeError('libgmssl inner error')
 
 
 	def sign(self, sign_key):
 		if self._inited != True:
-			raise InnerError('libgmssl inner error')
+			raise StateError('not initialized')
 		if self._sign != DO_SIGN:
-			raise InnerError('libgmssl inner error')
+			raise StateError('not sign state')
 
 		sig = create_string_buffer(SM9_SIGNATURE_SIZE)
 		siglen = c_size_t()
 		if gmssl.sm9_sign_finish(byref(self), byref(sign_key), sig, byref(siglen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		return sig[:siglen.value]
 
 	def verify(self, signature, public_master_key, signer_id):
 		if self._inited != True:
-			raise InnerError('libgmssl inner error')
-
+			raise StateError('not initialized')
 		if self._sign != DO_VERIFY:
-			raise InnerError('libgmssl inner error')
+			raise StateError('not verify state')
 
 		signer_id = signer_id.encode('utf-8')
 
@@ -888,19 +892,19 @@ def gmssl_parse_attr_type_and_value(name, d, dlen):
 	vlen = c_size_t()
 
 	if gmssl.x509_name_type_from_der(byref(oid), byref(d), byref(dlen)) != 1:
-		raise InnerError('libgmssl inner error')
+		raise NativeError('libgmssl inner error')
 	gmssl.x509_name_type_name.restype = c_char_p
 	oid_name = gmssl.x509_name_type_name(oid).decode('ascii')
 
 	if oid_name == 'emailAddress':
 		if gmssl.asn1_ia5_string_from_der_ex(_ASN1_TAG_IA5String, byref(val), byref(vlen), byref(d), byref(dlen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 	else:
 		if gmssl.x509_directory_name_from_der(byref(tag), byref(val), byref(vlen), byref(d), byref(dlen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 
 	if dlen.value != 0:
-		raise InnerError('libgmssl inner error')
+		raise ValueError('invalid der encoding')
 
 	value = create_string_buffer(vlen.value)
 	libc.memcpy(value, val, vlen)
@@ -914,10 +918,10 @@ def gmssl_parse_rdn(name, d, dlen):
 
 	while dlen.value > 0:
 		if gmssl.asn1_type_from_der(_ASN1_TAG_SEQUENCE, byref(v), byref(vlen), byref(d), byref(dlen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 
 		if gmssl_parse_attr_type_and_value(name, v, vlen) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 
 	return True
 
@@ -928,7 +932,7 @@ def gmssl_parse_name(name, d, dlen):
 
 	while dlen.value > 0:
 		if gmssl.asn1_nonempty_type_from_der(c_int(_ASN1_TAG_SET), byref(v), byref(vlen), byref(d), byref(dlen)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		gmssl_parse_rdn(name, v, vlen)
 	return True
 
@@ -947,7 +951,7 @@ class Sm2Certificate:
 		cert = c_void_p()
 		certlen = c_size_t()
 		if gmssl.x509_cert_new_from_file(byref(cert), byref(certlen), path.encode('utf-8')) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 
 		self._cert = create_string_buffer(certlen.value)
 		libc.memcpy(self._cert, cert, certlen)
@@ -960,7 +964,7 @@ class Sm2Certificate:
 		libc.fopen.restype = c_void_p
 		fp = libc.fopen(path.encode('utf-8'), 'wb')
 		if gmssl.x509_cert_to_pem(self._cert, c_size_t(len(self._cert)), c_void_p(fp)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 
 	def get_serial_number(self):
 
@@ -969,7 +973,7 @@ class Sm2Certificate:
 
 		if gmssl.x509_cert_get_issuer_and_serial_number(self._cert, c_size_t(len(self._cert)),
 			None, None, byref(serial_ptr), byref(serial_len)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 
 		serial = create_string_buffer(serial_len.value)
 		libc.memcpy(serial, serial_ptr, serial_len)
@@ -980,7 +984,7 @@ class Sm2Certificate:
 		issuer_len = c_size_t()
 		if gmssl.x509_cert_get_issuer(self._cert, c_size_t(len(self._cert)),
 			byref(issuer_ptr), byref(issuer_len)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		issuer_raw = create_string_buffer(issuer_len.value)
 		libc.memcpy(issuer_raw, issuer_ptr, issuer_len)
 
@@ -993,7 +997,7 @@ class Sm2Certificate:
 		subject_len = c_size_t()
 		if gmssl.x509_cert_get_subject(self._cert, c_size_t(len(self._cert)),
 			byref(subject_ptr), byref(subject_len)) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		subject_raw = create_string_buffer(subject_len.value)
 		libc.memcpy(subject_raw, subject_ptr, subject_len)
 
@@ -1015,7 +1019,7 @@ class Sm2Certificate:
 			None, None, None, None, None, None,
 			byref(not_before), byref(not_after),
 			None, None, None, None, None, None, None, None, None, None, None, None) != 1:
-			raise InnerError('libgmssl inner error')
+			raise NativeError('libgmssl inner error')
 		return Validity(not_before.value, not_after.value)
 
 	def verify_by_ca_certificate(self, cacert, sm2_id):
