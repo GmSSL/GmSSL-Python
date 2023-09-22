@@ -10,13 +10,18 @@ from gmssl import *
 # run sm2_key.py first
 
 
+print("SM2_MIN_PLAINTEXT_SIZE =", SM2_MIN_PLAINTEXT_SIZE)
+print("SM2_MAX_PLAINTEXT_SIZE =", SM2_MAX_PLAINTEXT_SIZE)
+print("SM2_MIN_CIPHERTEXT_SIZE =", SM2_MIN_CIPHERTEXT_SIZE)
+print("SM2_MAX_CIPHERTEXT_SIZE =", SM2_MAX_CIPHERTEXT_SIZE)
+print("")
 
 # Sender
 
 public_key = Sm2Key()
 public_key.import_public_key_info_pem('sm2pub.pem')
 
-plaintext = b'Plaintext message'
+plaintext = rand_bytes(SM4_KEY_SIZE + SM3_HMAC_MIN_KEY_SIZE)
 ciphertext = public_key.encrypt(plaintext)
 
 

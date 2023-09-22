@@ -10,6 +10,10 @@ from gmssl import *
 # run sm2_key.py first
 
 
+print("SM2_DEFAULT_ID =", SM2_DEFAULT_ID)
+print("SM2_MAX_SIGNATURE_SIZE =", SM2_MAX_SIGNATURE_SIZE)
+print("")
+
 # Signer
 
 private_key = Sm2Key()
