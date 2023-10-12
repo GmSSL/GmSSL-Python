@@ -11,12 +11,18 @@
 from ctypes import *
 from ctypes.util import find_library
 import datetime
+import sys
 
 if find_library('gmssl') == None:
 	raise ValueError('Install GmSSL dynamic library from https://github.com/guanzhi/GmSSL')
-
 gmssl = cdll.LoadLibrary(find_library("gmssl"))
-libc = cdll.LoadLibrary(find_library('c'))
+if gmssl.gmssl_version_num() < 30101:
+	raise ValueError('GmSSL version < 3.1.1')
+
+if sys.platform == 'win32':
+	libc = cdll.LoadLibrary(find_library('msvcrt'))
+else:
+	libc = cdll.LoadLibrary(find_library('c'))
 
 
 class NativeError(Exception):
