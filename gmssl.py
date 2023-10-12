@@ -35,7 +35,7 @@ class StateError(Exception):
 	Crypto state error
 	'''
 
-GMSSL_PYTHON_VERSION = "2.2.1"
+GMSSL_PYTHON_VERSION = "2.2.2"
 
 def gmssl_library_version_num():
 	return gmssl.gmssl_version_num()
