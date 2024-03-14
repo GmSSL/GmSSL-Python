@@ -23,7 +23,7 @@
 首先在https://github.com/guanzhi/GmSSL 项目上下载最新的GmSSL代码[GmSSL-master.zip](https://github.com/guanzhi/GmSSL/archive/refs/heads/master.zip)，编译并安装。GmSSL代码是C语言编写的，需要安装GCC、CMake来编译，在Ubuntu/Debian系统上可以执行
 
 ```bash
-sudo install build-essentials cmake
+sudo apt install build-essential cmake
 ```
 
 安装依赖的编译工具，然后解压GmSSL源代码，进入源码目录`GmSSL-master`并执行如下指令：
