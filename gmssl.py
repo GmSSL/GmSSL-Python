@@ -14,12 +14,20 @@ import sys
 from ctypes import *
 from ctypes.util import find_library
 
+# 检查是否为macOS
+is_mac = sys.platform.startswith('darwin')
+# 检查是否为Linux
+is_linux = sys.platform.startswith('linux')
+
 try:
     home_directory = os.path.expanduser('~')
     if not home_directory.endswith('/'):
         home_directory += '/'
     ext_dir = home_directory + ".gmssl_3.1.1_install/"
-    gmssl = cdll.LoadLibrary(ext_dir + "lib/libgmssl.so.3.1")
+    if is_linux:
+        gmssl = cdll.LoadLibrary(ext_dir + "lib/libgmssl.so.3.1")
+    elif is_mac:
+        gmssl = cdll.LoadLibrary(ext_dir + "lib/libgmssl.3.1.dylib")
 except Exception:
     try:
         gmssl = cdll.LoadLibrary(find_library("gmssl"))
