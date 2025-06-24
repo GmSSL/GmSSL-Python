@@ -8,36 +8,36 @@ import base64
 import binascii
 import ctypes
 from enum import Enum
-from typing import Dict, List, Literal, Tuple
+from typing import Dict , List , Literal , Tuple
 
-from pyasn1.codec.der import decoder, encoder
-from pyasn1.type import namedtype, univ
+from pyasn1.codec.der import decoder , encoder
+from pyasn1.type import namedtype , univ
 
-from .gmssl import NativeError, SM2_MAX_CIPHERTEXT_SIZE, SM2_MAX_PLAINTEXT_SIZE, Sm2Key
+from .gmssl import NativeError , SM2_MAX_CIPHERTEXT_SIZE , SM2_MAX_PLAINTEXT_SIZE , SM3_DIGEST_SIZE , Sm2Key
 
 
 class SM2PubKeyASN1Sequence(univ.Sequence):
     componentType = namedtype.NamedTypes(
-        namedtype.NamedType('oid-tags',
-                            univ.Sequence(
-                                componentType = namedtype.NamedTypes(
-                                    namedtype.NamedType('oid-1', univ.ObjectIdentifier()),
-                                    namedtype.NamedType('oid-2', univ.ObjectIdentifier())
-                                )
-                            )),
-        namedtype.NamedType('sm2_public_key', univ.BitString())
-    )
+            namedtype.NamedType('oid-tags' ,
+                                univ.Sequence(
+                                        componentType = namedtype.NamedTypes(
+                                                namedtype.NamedType('oid-1' , univ.ObjectIdentifier()) ,
+                                                namedtype.NamedType('oid-2' , univ.ObjectIdentifier()) ,
+                                                ) ,
+                                        )) ,
+            namedtype.NamedType('sm2_public_key' , univ.BitString()) ,
+            )
 
 
 class SM2PubKeyRawData(object):
-    def __init__(self, oids: List[str], hex_data: str):
+    def __init__(self , oids: List[ str ] , hex_data: str):
         self.__oids = oids
         self.__hex_data = hex_data
-
+    
     @property
-    def oids(self) -> List[str]:
+    def oids(self) -> List[ str ]:
         return self.__oids
-
+    
     @property
     def hex_data(self) -> str:
         return self.__hex_data
@@ -70,16 +70,16 @@ class SM2CipherLength(Enum):
 def __easy_parse_sm2_pub_key__(base64_content: str) -> SM2PubKeyRawData:
     try:
         raw_bytes = base64.b64decode(base64_content)
-        ret_obj, _ = decoder.decode(raw_bytes, asn1Spec = SM2PubKeyASN1Sequence())
+        ret_obj , _ = decoder.decode(raw_bytes , asn1Spec = SM2PubKeyASN1Sequence())
     except Exception:
         raise ValueError('invalid sm2 public key bytes')
     else:
-        oid1 = ret_obj['oid-tags']['oid-1'].prettyPrint()
-        oid2 = ret_obj['oid-tags']['oid-2'].prettyPrint()
-        sm2_pub = ret_obj['sm2_public_key']
+        oid1 = ret_obj[ 'oid-tags' ][ 'oid-1' ].prettyPrint()
+        oid2 = ret_obj[ 'oid-tags' ][ 'oid-2' ].prettyPrint()
+        sm2_pub = ret_obj[ 'sm2_public_key' ]
         bit_string = sm2_pub.asOctets()
         hex_string = binascii.hexlify(bit_string).decode('utf-8')
-        return SM2PubKeyRawData([oid1, oid2], hex_string)
+        return SM2PubKeyRawData([ oid1 , oid2 ] , hex_string)
 
 
 def __check_private_key_password__(pri_key_password: str):
@@ -95,9 +95,9 @@ def __easy_read_sm2_pub_pem_file_lines__(pem_file: str) -> str:
     """
     MAX_FILE_SIZE = 2048
     file_size = 0
-    lines = []
+    lines = [ ]
     try:
-        with open(pem_file, 'r') as pem_file:
+        with open(pem_file , 'r') as pem_file:
             for line in pem_file:
                 file_size += len(line)
                 if file_size > MAX_FILE_SIZE:
@@ -111,8 +111,8 @@ def __easy_read_sm2_pub_pem_file_lines__(pem_file: str) -> str:
             i = i.strip()
             if len(i) > 0:
                 content += i.strip()
-        content = content.replace('-----BEGIN PUBLIC KEY-----', '')
-        content = content.replace('-----END PUBLIC KEY-----', '')
+        content = content.replace('-----BEGIN PUBLIC KEY-----' , '')
+        content = content.replace('-----END PUBLIC KEY-----' , '')
         if len(content) <= 0:
             raise ValueError("invalid pem content")
         return content
@@ -127,21 +127,21 @@ class SM2_C1C3C2_ASN1_Ciphertext(univ.Sequence):
     在实际应用中，随机数 k 是每次加密时新生成的随机数，以确保加密的安全性
     """
     componentType = namedtype.NamedTypes(
-        namedtype.NamedType('c1x', univ.Integer()),
-        namedtype.NamedType('c1y', univ.Integer()),
-        namedtype.NamedType('c3', univ.OctetString()),
-        namedtype.NamedType('c2', univ.OctetString())
-    )
+            namedtype.NamedType('c1x' , univ.Integer()) ,
+            namedtype.NamedType('c1y' , univ.Integer()) ,
+            namedtype.NamedType('c3' , univ.OctetString()) ,
+            namedtype.NamedType('c2' , univ.OctetString()) ,
+            )
 
 
 # 定义SM2 C1C2C3_ASN1 Ciphertext结构
 class SM2_C1C2C3_ASN1_Ciphertext(univ.Sequence):
     componentType = namedtype.NamedTypes(
-        namedtype.NamedType('c1x', univ.Integer()),
-        namedtype.NamedType('c1y', univ.Integer()),
-        namedtype.NamedType('c2', univ.OctetString()),
-        namedtype.NamedType('c3', univ.OctetString())
-    )
+            namedtype.NamedType('c1x' , univ.Integer()) ,
+            namedtype.NamedType('c1y' , univ.Integer()) ,
+            namedtype.NamedType('c2' , univ.OctetString()) ,
+            namedtype.NamedType('c3' , univ.OctetString()) ,
+            )
 
 
 def __check_raw_cipher_length__(raw_cipher: bytes):
@@ -151,110 +151,116 @@ def __check_raw_cipher_length__(raw_cipher: bytes):
     return
 
 
-def __parse_sm2_asn1_cipher_bytes__(raw_cipher: bytes,
+def __parse_sm2_asn1_cipher_bytes__(raw_cipher: bytes ,
                                     cipher_mode: Literal[
-                                        SM2CipherMode.C1C3C2_ASN1, SM2CipherMode.C1C2C3_ASN1] = SM2CipherMode.C1C3C2_ASN1) -> \
-    Tuple[
-        bytes, bytes, bytes, bytes]:
+                                        SM2CipherMode.C1C3C2_ASN1 , SM2CipherMode.C1C2C3_ASN1 ] =
+                                    SM2CipherMode.C1C3C2_ASN1) -> \
+        Tuple[
+            bytes , bytes , bytes , bytes ]:
     """
     解析 C1C3C2_ASN1 或 C1C2C3_ASN1 格式的密文数据，返回 C1X、C1Y、C3、C2 字节序列
     """
-    if cipher_mode not in [SM2CipherMode.C1C3C2_ASN1, SM2CipherMode.C1C2C3_ASN1]:
+    if cipher_mode not in [ SM2CipherMode.C1C3C2_ASN1 , SM2CipherMode.C1C2C3_ASN1 ]:
         raise ValueError('invalid sm2 cipher mode:{}'.format(cipher_mode))
     asn1SpecObj = SM2_C1C3C2_ASN1_Ciphertext()
     if cipher_mode == SM2CipherMode.C1C2C3_ASN1:
         asn1SpecObj = SM2_C1C2C3_ASN1_Ciphertext()
     try:
         __check_raw_cipher_length__(raw_cipher)
-        decoded, _ = decoder.decode(raw_cipher, asn1Spec = asn1SpecObj)
+        decoded , _ = decoder.decode(raw_cipher , asn1Spec = asn1SpecObj)
     except Exception:
         raise ValueError('invalid ASN1 cipher data')
     else:
         # print(decoded)
-        c1x = int(decoded['c1x'])  # 大整数
-        c1y = int(decoded['c1y'])  # 大整数
-        c2 = bytes(decoded['c2'])  # 字节流
-        c3 = bytes(decoded['c3'])  # 字节流
+        c1x = int(decoded[ 'c1x' ])  # 大整数
+        c1y = int(decoded[ 'c1y' ])  # 大整数
+        c2 = bytes(decoded[ 'c2' ])  # 字节流
+        c3 = bytes(decoded[ 'c3' ])  # 字节流
         # 大端字节序
-        c1x_bytes = c1x.to_bytes(length = 32, byteorder = 'big')
-        c1y_bytes = c1y.to_bytes(length = 32, byteorder = 'big')
-        return c1x_bytes, c1y_bytes, c3, c2
+        c1x_bytes = c1x.to_bytes(length = 32 , byteorder = 'big')
+        c1y_bytes = c1y.to_bytes(length = 32 , byteorder = 'big')
+        return c1x_bytes , c1y_bytes , c3 , c2
 
 
-def __encode_sm2_cipher_to_asn1_sequence__(cipher_c1c3c2: Tuple[bytes, bytes, bytes, bytes],
+def __encode_sm2_cipher_to_asn1_sequence__(cipher_c1c3c2: Tuple[ bytes , bytes , bytes , bytes ] ,
                                            cipher_mode: Literal[
-                                               SM2CipherMode.C1C3C2_ASN1, SM2CipherMode.C1C2C3_ASN1] = SM2CipherMode.C1C3C2_ASN1) -> bytes:
-    if cipher_mode not in [SM2CipherMode.C1C3C2_ASN1, SM2CipherMode.C1C2C3_ASN1]:
+                                               SM2CipherMode.C1C3C2_ASN1 , SM2CipherMode.C1C2C3_ASN1 ] =
+                                           SM2CipherMode.C1C3C2_ASN1) -> bytes:
+    if cipher_mode not in [ SM2CipherMode.C1C3C2_ASN1 , SM2CipherMode.C1C2C3_ASN1 ]:
         raise ValueError('invalid sm2 cipher mode:{}'.format(cipher_mode))
     try:
-        c1x = cipher_c1c3c2[0]
-        c1x_int = int.from_bytes(c1x, byteorder = 'big')
-        c1y = cipher_c1c3c2[1]
-        c1y_int = int.from_bytes(c1y, byteorder = 'big')
-        c3 = cipher_c1c3c2[2]
-        c2 = cipher_c1c3c2[3]
+        c1x = cipher_c1c3c2[ 0 ]
+        c1x_int = int.from_bytes(c1x , byteorder = 'big')
+        c1y = cipher_c1c3c2[ 1 ]
+        c1y_int = int.from_bytes(c1y , byteorder = 'big')
+        c3 = cipher_c1c3c2[ 2 ]
+        c2 = cipher_c1c3c2[ 3 ]
     except Exception as e:
         raise ValueError('invalid sm2 cipher data:{}'.format(e))
     else:
         ciphertext = SM2_C1C3C2_ASN1_Ciphertext()
         if cipher_mode == SM2CipherMode.C1C2C3_ASN1:
             ciphertext = SM2_C1C2C3_ASN1_Ciphertext()
-        ciphertext.setComponentByName('c1x', c1x_int)
-        ciphertext.setComponentByName('c1y', c1y_int)
-        ciphertext.setComponentByName('c3', c3)
-        ciphertext.setComponentByName('c2', c2)
+        ciphertext.setComponentByName('c1x' , c1x_int)
+        ciphertext.setComponentByName('c1y' , c1y_int)
+        ciphertext.setComponentByName('c3' , c3)
+        ciphertext.setComponentByName('c2' , c2)
         encoded_ciphertext = encoder.encode(ciphertext)
         return encoded_ciphertext
 
 
-def __parse_sm2_c1c3c2_cipher_bytes__(raw_cipher: bytes) -> Tuple[bytes, bytes, bytes, bytes]:
+def __parse_sm2_c1c3c2_cipher_bytes__(raw_cipher: bytes) -> Tuple[ bytes , bytes , bytes , bytes ]:
     """
     解析 C1C3C2 格式的密文数据，返回 C1X、C1Y、C3、C2 字节序列
     """
     try:
         __check_raw_cipher_length__(raw_cipher)
-        c1x_bytes = raw_cipher[:SM2CipherLength.C1XLenInBytes.value]
+        c1x_bytes = raw_cipher[ :SM2CipherLength.C1XLenInBytes.value ]
         c1y_bytes = raw_cipher[
-                    SM2CipherLength.C1XLenInBytes.value: SM2CipherLength.C1XLenInBytes.value + SM2CipherLength.C1YLenInBytes.value]
-        c3_bytes = raw_cipher[SM2CipherLength.C1XLenInBytes.value + SM2CipherLength.C1YLenInBytes.value:
-                              SM2CipherLength.C1XLenInBytes.value + SM2CipherLength.C1YLenInBytes.value + SM2CipherLength.C3LenInBytes.value]
+                    SM2CipherLength.C1XLenInBytes.value: SM2CipherLength.C1XLenInBytes.value +
+                                                         SM2CipherLength.C1YLenInBytes.value ]
+        c3_bytes = raw_cipher[ SM2CipherLength.C1XLenInBytes.value + SM2CipherLength.C1YLenInBytes.value:
+                               SM2CipherLength.C1XLenInBytes.value + SM2CipherLength.C1YLenInBytes.value +
+                               SM2CipherLength.C3LenInBytes.value ]
         c2_bytes = raw_cipher[
-                   SM2CipherLength.C1XLenInBytes.value + SM2CipherLength.C1YLenInBytes.value + SM2CipherLength.C3LenInBytes.value:]
+                   SM2CipherLength.C1XLenInBytes.value + SM2CipherLength.C1YLenInBytes.value +
+                   SM2CipherLength.C3LenInBytes.value: ]
     except Exception as e:
         raise ValueError('invalid sm2 cipher data:{}'.format(e))
     else:
-        return c1x_bytes, c1y_bytes, c3_bytes, c2_bytes
+        return c1x_bytes , c1y_bytes , c3_bytes , c2_bytes
 
 
-def __parse_sm2_c1c2c3_bytes__(raw_cipher: bytes) -> Tuple[bytes, bytes, bytes, bytes]:
+def __parse_sm2_c1c2c3_bytes__(raw_cipher: bytes) -> Tuple[ bytes , bytes , bytes , bytes ]:
     """
     解析 C1C2C3 格式的密文数据，返回 C1X、C1Y、C3、C2 字节序列
     """
     try:
         __check_raw_cipher_length__(raw_cipher)
-        c1x_bytes = raw_cipher[:SM2CipherLength.C1XLenInBytes.value]
+        c1x_bytes = raw_cipher[ :SM2CipherLength.C1XLenInBytes.value ]
         c1y_bytes = raw_cipher[
-                    SM2CipherLength.C1XLenInBytes.value: SM2CipherLength.C1XLenInBytes.value + SM2CipherLength.C1YLenInBytes.value]
-        c3_bytes = raw_cipher[len(raw_cipher) - SM2CipherLength.C3LenInBytes.value:]
-        c2_bytes = raw_cipher[SM2CipherLength.C1XLenInBytes.value + SM2CipherLength.C1YLenInBytes.value:len(
-            raw_cipher) - SM2CipherLength.C3LenInBytes.value]
+                    SM2CipherLength.C1XLenInBytes.value: SM2CipherLength.C1XLenInBytes.value +
+                                                         SM2CipherLength.C1YLenInBytes.value ]
+        c3_bytes = raw_cipher[ len(raw_cipher) - SM2CipherLength.C3LenInBytes.value: ]
+        c2_bytes = raw_cipher[ SM2CipherLength.C1XLenInBytes.value + SM2CipherLength.C1YLenInBytes.value:len(
+                raw_cipher) - SM2CipherLength.C3LenInBytes.value ]
     except Exception as e:
         raise ValueError('invalid sm2 cipher data:{}'.format(e))
     else:
-        return c1x_bytes, c1y_bytes, c3_bytes, c2_bytes
+        return c1x_bytes , c1y_bytes , c3_bytes , c2_bytes
 
 
-def __encode_cipher__(target_mode: SM2CipherMode, cipher_c1c3c2: Tuple[bytes, bytes, bytes, bytes]) -> bytes:
+def __encode_cipher__(target_mode: SM2CipherMode , cipher_c1c3c2: Tuple[ bytes , bytes , bytes , bytes ]) -> bytes:
     """
     将 C1X C1Y C3 C2 密文字节序列编码成指定的 SM2 密文格式
     如果是 ASN1 格式，则需要单独做二进制编码
     如果是非 ASN1 格式，则只需要按照指定的顺序将 C1、C3、C2进行拼接
     """
     try:
-        c1x = cipher_c1c3c2[0]
-        c1y = cipher_c1c3c2[1]
-        c3 = cipher_c1c3c2[2]
-        c2 = cipher_c1c3c2[3]
+        c1x = cipher_c1c3c2[ 0 ]
+        c1y = cipher_c1c3c2[ 1 ]
+        c3 = cipher_c1c3c2[ 2 ]
+        c2 = cipher_c1c3c2[ 3 ]
     except Exception as e:
         raise ValueError('invalid cipher data:{}'.format(e))
     else:
@@ -273,29 +279,29 @@ def __encode_cipher__(target_mode: SM2CipherMode, cipher_c1c3c2: Tuple[bytes, by
             return bytes(ret)
         else:
             try:
-                if target_mode in [SM2CipherMode.C1C3C2_ASN1, SM2CipherMode.C1C2C3_ASN1]:
-                    return __encode_sm2_cipher_to_asn1_sequence__(cipher_c1c3c2 = cipher_c1c3c2,
+                if target_mode in [ SM2CipherMode.C1C3C2_ASN1 , SM2CipherMode.C1C2C3_ASN1 ]:
+                    return __encode_sm2_cipher_to_asn1_sequence__(cipher_c1c3c2 = cipher_c1c3c2 ,
                                                                   cipher_mode = target_mode)
                 else:
                     raise TypeError('invalid cipher mode:{}'.format(target_mode))
             except Exception as e:
-                raise ValueError('encode cipher to asn1 mode:{} error:{}'.format(target_mode, e))
+                raise ValueError('encode cipher to asn1 mode:{} error:{}'.format(target_mode , e))
 
 
-def __parse_and_repack_cipher__(cipher_mode: SM2CipherMode,
-                                cipher_format: SM2CipherFormat,
+def __parse_and_repack_cipher__(cipher_mode: SM2CipherMode ,
+                                cipher_format: SM2CipherFormat ,
                                 c1c3c2_asn1_cipher: bytes) -> str:
-    if not isinstance(cipher_mode, SM2CipherMode):
+    if not isinstance(cipher_mode , SM2CipherMode):
         raise TypeError('invalid cipher mode: {}'.format(cipher_mode))
-    if not isinstance(cipher_format, SM2CipherFormat):
+    if not isinstance(cipher_format , SM2CipherFormat):
         raise TypeError('invalid cipher format: {}'.format(cipher_format))
     encoded_cipher_bytes = c1c3c2_asn1_cipher
     if cipher_mode != SM2CipherMode.C1C3C2_ASN1:
         # 首先按照C1C3C2_ASN1格式解析原始的数据，获取到 C1X、C1Y、C3、C2这四部分数据
-        cipher_c1_c3_c2 = __parse_sm2_asn1_cipher_bytes__(raw_cipher = c1c3c2_asn1_cipher,
+        cipher_c1_c3_c2 = __parse_sm2_asn1_cipher_bytes__(raw_cipher = c1c3c2_asn1_cipher ,
                                                           cipher_mode = SM2CipherMode.C1C3C2_ASN1)
-        encoded_cipher_bytes = __encode_cipher__(target_mode = cipher_mode, cipher_c1c3c2 = cipher_c1_c3_c2)
-
+        encoded_cipher_bytes = __encode_cipher__(target_mode = cipher_mode , cipher_c1c3c2 = cipher_c1_c3_c2)
+    
     if cipher_format == SM2CipherFormat.Base64Str:
         return base64.b64encode(encoded_cipher_bytes).decode('utf-8')
     else:
@@ -303,10 +309,10 @@ def __parse_and_repack_cipher__(cipher_mode: SM2CipherMode,
 
 
 def __parse_raw_cipher_and_repack_to_c1c3c2_asn1__(cipher_mode: Literal[
-    SM2CipherMode.C1C3C2_ASN1,
-    SM2CipherMode.C1C3C2,
-    SM2CipherMode.C1C2C3_ASN1,
-    SM2CipherMode.C1C2C3],
+    SM2CipherMode.C1C3C2_ASN1 ,
+    SM2CipherMode.C1C3C2 ,
+    SM2CipherMode.C1C2C3_ASN1 ,
+    SM2CipherMode.C1C2C3 ] ,
                                                    raw_cipher_bytes: bytes) -> bytes:
     """
     将不同模式下的密文数据统一转换为 C1C3C2_ASN1 模式的密文
@@ -317,22 +323,22 @@ def __parse_raw_cipher_and_repack_to_c1c3c2_asn1__(cipher_mode: Literal[
         if cipher_mode == SM2CipherMode.C1C3C2_ASN1:
             return raw_cipher_bytes
         elif cipher_mode == SM2CipherMode.C1C2C3_ASN1:
-            c1_c3_c2_bytes = __parse_sm2_asn1_cipher_bytes__(raw_cipher = raw_cipher_bytes, cipher_mode = cipher_mode)
+            c1_c3_c2_bytes = __parse_sm2_asn1_cipher_bytes__(raw_cipher = raw_cipher_bytes , cipher_mode = cipher_mode)
         elif cipher_mode == SM2CipherMode.C1C2C3:
             c1_c3_c2_bytes = __parse_sm2_c1c2c3_bytes__(raw_cipher = raw_cipher_bytes)
         elif cipher_mode == SM2CipherMode.C1C3C2:
             c1_c3_c2_bytes = __parse_sm2_c1c3c2_cipher_bytes__(raw_cipher = raw_cipher_bytes)
     except Exception as e:
-        raise ValueError('invalid cipher data:{}, cipher mode = {}'.format(e, cipher_mode))
+        raise ValueError('invalid cipher data:{}, cipher mode = {}'.format(e , cipher_mode))
     else:
-        return __encode_cipher__(target_mode = SM2CipherMode.C1C3C2_ASN1, cipher_c1c3c2 = c1_c3_c2_bytes)
+        return __encode_cipher__(target_mode = SM2CipherMode.C1C3C2_ASN1 , cipher_c1c3c2 = c1_c3_c2_bytes)
 
 
 class EasySm2Key(object):
     """
     EasySM2Key 对象非线程安全，不可并发执行写操作
     """
-
+    
     def __init__(self):
         self._point_x = ''
         self._point_y = ''
@@ -340,34 +346,34 @@ class EasySm2Key(object):
         self._sm2_raw_key = Sm2Key()
         self.reset_key()
         self.new_key()
-
+    
     def reset_key(self):
         """
         清理 key 数据
         清理后可以使用 new_key() 生成新的 SM2密钥对数据
         """
         self.__clear_raw_key_data__()
-
+    
     def __clear_raw_key_data__(self):
         # 清空数据
-        ctypes.memset(ctypes.byref(self._sm2_raw_key.public_key.x), 0, 32)
-        ctypes.memset(ctypes.byref(self._sm2_raw_key.public_key.y), 0, 32)
-        ctypes.memset(ctypes.byref(self._sm2_raw_key.private_key), 0, 32)
+        ctypes.memset(ctypes.byref(self._sm2_raw_key.public_key.x) , 0 , 32)
+        ctypes.memset(ctypes.byref(self._sm2_raw_key.public_key.y) , 0 , 32)
+        ctypes.memset(ctypes.byref(self._sm2_raw_key.private_key) , 0 , 32)
         self._point_x = ''
         self._point_y = ''
         self._private_key_hex = ''
         self._sm2_raw_key._has_public_key = False
         self._sm2_raw_key._has_private_key = False
-
+    
     def __set_point_x_y_in_hex__(self):
         if self._sm2_raw_key.has_public_key():
             self._point_x = bytes(self._sm2_raw_key.public_key.x).hex()
             self._point_y = bytes(self._sm2_raw_key.public_key.y).hex()
-
+    
     def __set_private_key_in_hex__(self):
         if self._sm2_raw_key.has_private_key():
             self._private_key_hex = bytes(self._sm2_raw_key.private_key).hex()
-
+    
     def new_key(self) -> EasySm2Key:
         """
         用于在使用 reset_key() 后重新生成新的 SM2 密钥对
@@ -377,8 +383,8 @@ class EasySm2Key(object):
         self.__set_point_x_y_in_hex__()
         self.__set_private_key_in_hex__()
         return self
-
-    def export_to_pem_file(self, file_name_prefix: str, pri_key_password: str):
+    
+    def export_to_pem_file(self , file_name_prefix: str , pri_key_password: str):
         """
         输入：文件名前缀、私钥密码
         假设文件名前缀为 test, 则生成的文件名为: test_sm2_public.pem、test_sm2_private.pem
@@ -391,11 +397,11 @@ class EasySm2Key(object):
         try:
             __check_private_key_password__(pri_key_password)
             self._sm2_raw_key.export_public_key_info_pem(pub_key_file_name)
-            self._sm2_raw_key.export_encrypted_private_key_info_pem(pri_key_file_name, pri_key_password)
+            self._sm2_raw_key.export_encrypted_private_key_info_pem(pri_key_file_name , pri_key_password)
         except Exception as e:
             raise e
-
-    def load_sm2_pub_key(self, pub_key_file: str) -> SM2PubKeyRawData:
+    
+    def load_sm2_pub_key(self , pub_key_file: str) -> SM2PubKeyRawData:
         """
         从 PEM 文件中加载 SM2 公钥
         """
@@ -410,15 +416,15 @@ class EasySm2Key(object):
             self.__set_point_x_y_in_hex__()
             assert sm2_pub_raw_data.hex_data == self.__get_pub_key_by_point__()
             return sm2_pub_raw_data
-
-    def load_sm2_private_key(self, pri_key_file: str, password: str):
+    
+    def load_sm2_private_key(self , pri_key_file: str , password: str):
         """
         从 PEM 文件中加载 SM2 私钥，加载的私钥必须要输入解密密码
         加载密钥时会重置公钥和私钥数据
         """
         try:
             __check_private_key_password__(password)
-            self._sm2_raw_key.import_encrypted_private_key_info_pem(pri_key_file, password)
+            self._sm2_raw_key.import_encrypted_private_key_info_pem(pri_key_file , password)
         except NativeError as e:
             raise ValueError('invalid sm2 private key file or password, {}'.format(e))
         except Exception:
@@ -426,8 +432,8 @@ class EasySm2Key(object):
         else:
             self.__set_point_x_y_in_hex__()
             self.__set_private_key_in_hex__()
-
-    def __get_pub_key_by_point__(self, uncompressed: bool = True) -> str:
+    
+    def __get_pub_key_by_point__(self , uncompressed: bool = True) -> str:
         """
         在 SM2 公钥十六进制表示中，前导字节04表示该公钥是非压缩形式。
         SM2 公钥是椭圆曲线上的一个点，由横坐标X和纵坐标Y两个分量组成。
@@ -441,7 +447,7 @@ class EasySm2Key(object):
             else:
                 raise TypeError('SM2 Public Key in compressed form are not supported')
         return ''
-
+    
     def get_sm2_public_key_in_hex(self) -> str:
         """
         返回公钥的十六进制字符串
@@ -450,7 +456,7 @@ class EasySm2Key(object):
         if self._sm2_raw_key.has_public_key():
             return self.__get_pub_key_by_point__()
         return ''
-
+    
     def get_sm2_private_key_in_hex(self) -> str:
         """
         返回私钥的十六进制字符串
@@ -459,15 +465,15 @@ class EasySm2Key(object):
         if self._sm2_raw_key.has_public_key():
             return self._private_key_hex
         return ''
-
-    def get_point_in_hex(self) -> Dict[str, str]:
+    
+    def get_point_in_hex(self) -> Dict[ str , str ]:
         """
         返回 [X, Y] 坐标的十六进制字符串
         如果没有公钥，则返回的坐标值为空
         """
         if self._sm2_raw_key.has_public_key():
-            return {'X': self._point_x, 'Y': self._point_y}
-        return {'X': '', 'Y': ''}
+            return { 'X':self._point_x , 'Y':self._point_y }
+        return { 'X':'' , 'Y':'' }
     
     def get_z(self) -> bytes:
         """
@@ -479,91 +485,72 @@ class EasySm2Key(object):
         if not self._sm2_raw_key.has_public_key():
             raise ValueError('need SM2 Public Key')
         return self._sm2_raw_key.compute_z()
+    
+    def sign_digest(self , digest: bytes) -> bytes:
+        if not self._sm2_raw_key.has_private_key():
+            raise ValueError('need SM2 Private Key')
+        if len(digest) != SM3_DIGEST_SIZE:
+            raise ValueError(f'Invalid SM3 digest size, should be {SM3_DIGEST_SIZE} bytes')
+        return self._sm2_raw_key.sign(digest)
+    
+    def verify_digest_signature(self , digest: bytes , signature: bytes) -> bool:
+        if not self._sm2_raw_key.has_public_key():
+            raise ValueError('need SM2 Public Key')
+        if len(digest) != SM3_DIGEST_SIZE:
+            raise ValueError('Invalid SM3 digest size, should be {SM3_DIGEST_SIZE} bytes')
+        return self._sm2_raw_key.verify(digest , signature)
 
 
 class EasySm2EncryptionKey(EasySm2Key):
     def __init__(self):
         super().__init__()
-
-    def Encrypt(self, plain_data: bytes,
+    
+    def Encrypt(self , plain_data: bytes ,
                 cipher_mode: Literal[
-                    SM2CipherMode.C1C3C2_ASN1,
-                    SM2CipherMode.C1C3C2,
-                    SM2CipherMode.C1C2C3_ASN1,
-                    SM2CipherMode.C1C2C3] = SM2CipherMode.C1C3C2_ASN1,
+                    SM2CipherMode.C1C3C2_ASN1 ,
+                    SM2CipherMode.C1C3C2 ,
+                    SM2CipherMode.C1C2C3_ASN1 ,
+                    SM2CipherMode.C1C2C3 ] = SM2CipherMode.C1C3C2_ASN1 ,
                 cipher_format: Literal[
-                    SM2CipherFormat.Base64Str,
-                    SM2CipherFormat.HexStr] = SM2CipherFormat.Base64Str) -> str:
-        if not isinstance(cipher_mode, SM2CipherMode):
+                    SM2CipherFormat.Base64Str ,
+                    SM2CipherFormat.HexStr ] = SM2CipherFormat.Base64Str) -> str:
+        if not isinstance(cipher_mode , SM2CipherMode):
             raise TypeError('invalid cipher mode: {}'.format(cipher_mode))
-        if not isinstance(cipher_format, SM2CipherFormat):
+        if not isinstance(cipher_format , SM2CipherFormat):
             raise TypeError('invalid cipher format: {}'.format(cipher_format))
         if self._sm2_raw_key.has_public_key():
             if len(plain_data) <= SM2_MAX_PLAINTEXT_SIZE:
                 c1c3c2_asn1_cipher_bytes: bytes = self._sm2_raw_key.encrypt(plain_data)
-                return __parse_and_repack_cipher__(cipher_mode, cipher_format, c1c3c2_asn1_cipher_bytes)
+                return __parse_and_repack_cipher__(cipher_mode , cipher_format , c1c3c2_asn1_cipher_bytes)
             else:
                 raise ValueError('the maximum limit for the plaintext is {} bytes'.format(SM2_MAX_PLAINTEXT_SIZE))
         else:
             raise ValueError('empty sm2 public key')
-
-    def Decrypt(self, cipher_data: bytes,
+    
+    def Decrypt(self , cipher_data: bytes ,
                 cipher_mode: Literal[
-                    SM2CipherMode.C1C3C2_ASN1,
-                    SM2CipherMode.C1C3C2,
-                    SM2CipherMode.C1C2C3_ASN1,
-                    SM2CipherMode.C1C2C3] = SM2CipherMode.C1C3C2_ASN1) -> bytes:
+                    SM2CipherMode.C1C3C2_ASN1 ,
+                    SM2CipherMode.C1C3C2 ,
+                    SM2CipherMode.C1C2C3_ASN1 ,
+                    SM2CipherMode.C1C2C3 ] = SM2CipherMode.C1C3C2_ASN1) -> bytes:
         """
         cipher_data: 密文数据
         cipher_mode: 密文模式
         返回明文的字节序列
         """
-        if not isinstance(cipher_mode, SM2CipherMode):
+        if not isinstance(cipher_mode , SM2CipherMode):
             raise TypeError('invalid cipher mode: {}'.format(cipher_mode))
         if not self._sm2_raw_key.has_private_key():
             raise TypeError('no private key included, can not decrypt')
         if len(cipher_data) > SM2_MAX_CIPHERTEXT_SIZE:
-            raise ValueError('cipher data too long, the maximum limit for the cipher is {} bytes'.format(SM2_MAX_CIPHERTEXT_SIZE))
+            raise ValueError(
+                    'cipher data too long, the maximum limit for the cipher is {} bytes'.format(
+                            SM2_MAX_CIPHERTEXT_SIZE))
         try:
-            to_be_decrypted_cipher = __parse_raw_cipher_and_repack_to_c1c3c2_asn1__(cipher_mode = cipher_mode,
+            to_be_decrypted_cipher = __parse_raw_cipher_and_repack_to_c1c3c2_asn1__(cipher_mode = cipher_mode ,
                                                                                     raw_cipher_bytes = cipher_data)
             ret = bytes(self._sm2_raw_key.decrypt(to_be_decrypted_cipher))
         except Exception as e:
-            raise ValueError('decrypt error:{}, cipher mode = {}'.format(e, cipher_mode))
+            raise ValueError('decrypt error:{}, cipher mode = {}'.format(e , cipher_mode))
         else:
             return ret
-
-
-if __name__ == '__main__':
-    enc = EasySm2EncryptionKey()
-    enc.load_sm2_private_key('./test_keys/tmp_test_sm2_private.pem', '123456')
-    plain = 'hello,world'
-    print('明文:', plain.encode('utf-8').hex())
-    print('随机生成的公钥数据:', enc.get_sm2_public_key_in_hex())
-    print('随机生成的私钥数据:', enc.get_sm2_private_key_in_hex())
-    print('公钥 XY 坐标:', enc.get_point_in_hex())
-    print('-' * 32)
-    for mode in SM2CipherMode:
-        print(mode, '密文 in Hex:', enc.Encrypt('hello,world'.encode('utf-8'), mode, SM2CipherFormat.HexStr))
-
-    print('-' * 32)
-
-    # c1c3c2_asn1_cipher_hex = "307302202DDE3E3B518AE79A0DA24792AACCAF277C70D2BF094A721402F988ABF34D8A2B022045FF327DDDECEDB4A239BF262539A435AC4B5A2CD40496921A15C44DE4FD8ED60420EDDF4218FE658B672FC09E3F86676702EC380AAA4A9495C26BDAB191826FB547040BC6CF28A8BF426DF50F5E4F"
-    # c1c2c3_asn1_cipher_hex = "3074022100AEC56299468A3F0915D07607D25CE80091953530962F60CB953269AA17D1CC370220775B350FFF2F5E6593DDF289D74EF180D272EE27F7EFC7BF7E77FF760B26A376040B603717A97A68C54DD12D33042034049DB7F277C2E78E9984E01BB5B1F8718CA1CB4ADFB5DB567604A65E877C4E"
-    # c1c3c2_cipher_hex = "D3E1C15A8DE95D7213C916DAD6E416764910DC219F9E2E59283D55C6F124DEA845948F16201DA56B4072D7A63E81DB50993133338B6571C2D4FC4A6DA25C17D956508371AB83490E140E6445CC2A2224CB576D2711B698D67BCA38004119C91AD6F505BAC893ACBAE5B8B7"
-    # c1c2c3_cipher_hex = "F7F93B18B51DEE2384EF6EF4E45F5802FD980C0B00131CBE8006E89BA66D8E1241855F38293970306C974D4DD929A3D059BB9082DD7AA68420630B24A61E92754A4307FB47B3FEB7CB15E7D1F94CF4F99F8378548ED73D0EDD86418D823ACDB58F1802B7C8BB03F99112F7"
-    #
-    # tmp_ciphers = {
-    #     SM2CipherMode.C1C3C2_ASN1: c1c3c2_asn1_cipher_hex,
-    #     SM2CipherMode.C1C2C3_ASN1: c1c2c3_asn1_cipher_hex,
-    #     SM2CipherMode.C1C2C3: c1c2c3_cipher_hex,
-    #     SM2CipherMode.C1C3C2: c1c3c2_cipher_hex,
-    # }
-    #
-    # for mode, cipher in tmp_ciphers.items():
-    #     try:
-    #         plain_hex = enc.decrypt(bytes.fromhex(cipher), mode).hex()
-    #     except Exception as e:
-    #         print('decrypt failed, mode={}'.format(mode))
-    #     else:
-    #         print('mode={}, decrypt success:{}, 明文 in Hex:{}'.format(mode, plain_hex == plain.encode('utf-8').hex(), plain_hex))
