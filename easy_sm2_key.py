@@ -468,6 +468,17 @@ class EasySm2Key(object):
         if self._sm2_raw_key.has_public_key():
             return {'X': self._point_x, 'Y': self._point_y}
         return {'X': '', 'Y': ''}
+    
+    def get_z(self) -> bytes:
+        """
+        计算用于SM2签名的SM3摘要过程
+            1. 使用公钥和userid计算z值
+            2. 将z值和消息原文msg拼接：得到z||msg
+            3. 计算z||msg的SM3摘要值
+        """
+        if not self._sm2_raw_key.has_public_key():
+            raise ValueError('need SM2 Public Key')
+        return self._sm2_raw_key.compute_z()
 
 
 class EasySm2EncryptionKey(EasySm2Key):
