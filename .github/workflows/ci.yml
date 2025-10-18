@@ -1,0 +1,139 @@
+name: CI
+
+# Trigger on push/pull requests to main branch and manual dispatch
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      python-version:
+        description: 'Python version to test (leave empty for all versions)'
+        required: false
+        type: string
+
+jobs:
+  lint:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system ruff
+
+      - name: Run ruff lint
+        run: |
+          echo "=== Running ruff lint ==="
+          ruff check src/ tests/
+
+      - name: Run ruff format check
+        run: |
+          echo "=== Running ruff format check ==="
+          ruff format --check src/ tests/
+
+  test:
+    name: Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: |
+          uv pip install --system pytest pytest-cov
+
+      - name: Install package in development mode
+        run: |
+          uv pip install --system -e .
+
+      - name: Verify installation
+        run: |
+          python -c "from gmssl import GMSSL_LIBRARY_VERSION, GMSSL_PYTHON_VERSION; print(f'GmSSL Library: {GMSSL_LIBRARY_VERSION}'); print(f'Python Binding: {GMSSL_PYTHON_VERSION}')"
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v --cov=src/gmssl --cov-report=xml --cov-report=term
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  build:
+    name: Build Package
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build package
+        run: python -m build
+
+      - name: Verify package
+        run: |
+          echo "=== Built packages ==="
+          ls -lh dist/
+          echo ""
+          echo "=== Package metadata ==="
+          twine check dist/*
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-packages
+          path: dist/*
+          retention-days: 7

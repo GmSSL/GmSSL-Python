@@ -1,0 +1,210 @@
+name: Release to GitHub
+
+# This workflow builds Python packages (wheel and sdist), tests them,
+# and creates a GitHub Release with the packages as attachments.
+#
+# Trigger:
+# - Automatically when pushing a version tag (e.g., v2.2.3)
+# - Manually from Actions tab
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v2.2.3
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build-package:
+    name: Build Python package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Extract version
+        id: get_version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            # Extract version from tag (v2.2.3 -> 2.2.3)
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            # Extract version from pyproject.toml
+            VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Verify version consistency
+        run: |
+          TOML_VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          WORKFLOW_VERSION="${{ steps.get_version.outputs.version }}"
+
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            if [ "$TOML_VERSION" != "$WORKFLOW_VERSION" ]; then
+              echo "Error: Tag version ($WORKFLOW_VERSION) doesn't match pyproject.toml version ($TOML_VERSION)"
+              exit 1
+            fi
+          fi
+
+          echo "Version verified: $TOML_VERSION"
+
+      - name: Build wheel and sdist
+        run: python -m build
+
+      - name: Verify package contents
+        run: |
+          echo "=== Built packages ==="
+          ls -lh dist/
+
+          echo ""
+          echo "=== Wheel contents (libraries) ==="
+          unzip -l dist/gmssl_python-*.whl | grep -E "(\.dylib|\.so|\.dll)" || echo "No libraries found in wheel!"
+
+          echo ""
+          echo "=== Package metadata ==="
+          twine check dist/*
+
+      - name: Upload packages as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-packages
+          path: dist/*
+          retention-days: 7
+
+  test-package:
+    name: Test package on ${{ matrix.os }}
+    needs: build-package
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.8', '3.12']
+
+    steps:
+      - name: Checkout code (for tests)
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          name: python-packages
+          path: dist
+
+      - name: Install package from wheel
+        shell: bash
+        run: |
+          pip install pytest
+          pip install dist/gmssl_python-*.whl
+
+      - name: Verify installation
+        shell: bash
+        run: |
+          python -c "from gmssl import GMSSL_LIBRARY_VERSION, GMSSL_PYTHON_VERSION; print(f'GmSSL Library: {GMSSL_LIBRARY_VERSION}'); print(f'Python Binding: {GMSSL_PYTHON_VERSION}')"
+
+      - name: Run tests
+        run: pytest tests/ -v
+
+  create-release:
+    name: Create GitHub Release
+    needs: test-package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required for creating releases
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for changelog
+
+      - name: Extract version
+        id: get_version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            TAG_NAME=${GITHUB_REF#refs/tags/}
+          else
+            VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+            TAG_NAME="v$VERSION"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          name: python-packages
+          path: dist
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          cat > release_notes.md << 'EOF'
+          ## GmSSL-Python v${{ steps.get_version.outputs.version }}
+
+          ### Installation
+
+          ```bash
+          pip install gmssl-python==${{ steps.get_version.outputs.version }}
+          ```
+
+          Or download the wheel from this release and install locally:
+
+          ```bash
+          pip install gmssl_python-${{ steps.get_version.outputs.version }}-py3-none-any.whl
+          ```
+
+          ### What's Included
+
+          - ✅ Python binding for GmSSL cryptographic library
+          - ✅ Bundled GmSSL libraries for Linux (x86_64, aarch64), macOS (universal), Windows (x86_64)
+          - ✅ No need to install GmSSL separately
+          - ✅ Tested on Python 3.8-3.12
+
+          ### Package Files
+
+          - `gmssl_python-${{ steps.get_version.outputs.version }}-py3-none-any.whl` - Universal wheel (recommended)
+          - `gmssl_python-${{ steps.get_version.outputs.version }}.tar.gz` - Source distribution
+
+          ### Documentation
+
+          See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) for usage examples.
+
+          ### License
+
+          Apache-2.0
+          EOF
+
+          cat release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.tag_name }}
+          name: Release ${{ steps.get_version.outputs.tag_name }}
+          body_path: release_notes.md
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

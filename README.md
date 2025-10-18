@@ -14,11 +14,68 @@
 
 目前`gmssl-python`功能可以覆盖除SSL/TLS/TLCP之外的国密算法主要应用开发场景。
 
+## 项目结构
+
+本项目采用 Python 包最佳实践的 `src/` 布局：
+
+```
+GmSSL-Python/
+├── src/
+│   └── gmssl/
+│       ├── __init__.py    # 公共 API 导出
+│       └── _core.py       # 核心实现 (ctypes bindings)
+├── tests/
+│   └── test_gmssl.py      # 测试套件
+└── pyproject.toml         # 包配置
+```
+
+**为什么使用 `src/` 布局？**
+- 强制开发者测试已安装的包，而不是源代码目录
+- 避免开发环境和安装版本之间的导入混淆
+- PyPA (Python Packaging Authority) 推荐
+- 被现代 Python 项目广泛采用 (requests, pytest 等)
+
 ## 安装
 
-由于`gmssl-python`以`ctypes`方式实现，因此所有密码功能都是通过调用本地安装的GmSSL动态库 (如`/usr/local/lib/libgmssl.so`)实现的，在安装和调用`gmssl-python`之前必须首先在系统上安装GmSSL，然后通过Python的包管理工具`pip`从Python代码仓库安装，或者从`gmssl-python`项目的代码仓库https://github.com/GmSSL/GmSSL-Python 下载最新的源代码，从本地安装。
+### 快速安装（推荐）
 
-### 安装GmSSL
+从 v2.2.2 开始，`gmssl-python` 已经包含了 GmSSL 动态库，可以直接通过 `pip` 安装使用：
+
+```bash
+pip install gmssl-python
+```
+
+**支持的平台：**
+- ✅ **Linux x86_64** (GLIBC 2.17+) - Ubuntu 14.04+, Debian 8+, RHEL 7+
+- ✅ **Linux aarch64** (GLIBC 2.17+) - ARM64 服务器和开发板
+- ✅ **macOS** (11.0+) - Intel 和 Apple Silicon 通用二进制
+- ✅ **Windows x86_64** - Windows 10/11
+
+安装后即可直接使用，无需额外安装 GmSSL 库。
+
+**系统要求：**
+- Linux: GLIBC 2.17 或更高版本（2012 年发布，几乎所有现代发行版都满足）
+- macOS: macOS 11.0 (Big Sur) 或更高版本
+- Windows: Windows 10 或更高版本
+
+### 库加载优先级
+
+`gmssl-python` 使用智能库加载策略（遵循 "Never break userspace" 原则）：
+
+1. **系统库优先**：如果系统已安装 GmSSL（如 `/usr/local/lib/libgmssl.so`），优先使用系统库
+2. **包内库回退**：如果系统没有 GmSSL，使用包内打包的库
+3. **版本检查**：如果系统库版本 < 3.1.1，自动回退到包内库（如果可用）
+
+这确保了：
+- ✅ 已有系统 GmSSL 的用户继续使用其版本（向后兼容）
+- ✅ 新用户无需手动安装 GmSSL（开箱即用）
+- ✅ 开发者可以通过安装系统 GmSSL 覆盖包内库（灵活性）
+
+### 手动安装 GmSSL（可选）
+
+如果你希望使用系统级 GmSSL 库（例如需要最新版本或自定义编译），可以按以下步骤手动安装：
+
+#### 安装GmSSL
 
 首先在https://github.com/guanzhi/GmSSL 项目上下载最新的GmSSL代码[GmSSL-master.zip](https://github.com/guanzhi/GmSSL/archive/refs/heads/master.zip)，编译并安装。GmSSL代码是C语言编写的，需要安装GCC、CMake来编译，在Ubuntu/Debian系统上可以执行
 
@@ -60,17 +117,22 @@ $ pip show gmssl-python
 
 从代码仓库中安装的`gmssl-python`通常不是最新版本，可以下载最新的GmSSL-Python代码  [GmSSL-Python-main.zip](https://github.com/GmSSL/GmSSL-Python/archive/refs/heads/main.zip)，本地安装。
 
-解压缩并进入源代码目录`GmSSL-Python-main`。由于最新代码可能还处于开发过程中，在安装前必须进行测试确保全部功能正确，`gmssl-python`中提供了测试，执行如下命令
+解压缩并进入源代码目录`GmSSL-Python-main`。由于最新代码可能还处于开发过程中，在安装前必须进行测试确保全部功能正确，`gmssl-python`中提供了基于 pytest 的测试，执行如下命令
 
 运行测试
 
 ```bash
-$ python -m unittest -v
-................
-----------------------------------------------------------------------
-Ran 16 tests in 1.407s
+$ pytest tests/ -v
+================================================= test session starts =================================================
+platform darwin -- Python 3.12.9, pytest-8.4.2, pluggy-1.6.0
+collected 19 items
 
-OK
+tests/test_gmssl.py::TestVersion::test_library_version_num PASSED                                              [  5%]
+tests/test_gmssl.py::TestVersion::test_library_version_string PASSED                                           [ 10%]
+...
+tests/test_gmssl.py::TestSM2Certificate::test_sm2_certificate_parsing PASSED                                   [100%]
+
+================================================= 19 passed in 1.04s ==================================================
 ```
 
 上面的输出表明测试通过。
@@ -122,7 +184,76 @@ echo -n abc | gmssl sm3
 
 可以看到输出相同的SM3哈希值
 
+## 开发指南
 
+### 运行测试
+
+项目包含 **117 个测试**，覆盖所有主要功能、错误处理、边界条件、性能和线程安全测试。
+
+```bash
+# 运行所有测试（推荐使用 uv）
+uv run pytest tests/ -v
+
+# 或使用 pytest 直接运行
+pytest tests/ -v
+
+# 运行特定测试文件
+uv run pytest tests/test_errors.py -v        # 错误处理测试
+uv run pytest tests/test_edge_cases.py -v    # 边界条件测试
+uv run pytest tests/test_additional_methods.py -v  # 补充方法测试
+uv run pytest tests/test_pygmssl_missing.py -v     # pygmssl缺失测试
+uv run pytest tests/test_thread_safety.py -v       # 线程安全测试
+```
+
+**测试覆盖**:
+- ✅ 功能测试: 17 个
+- ✅ 错误处理测试: 34 个
+- ✅ 边界条件测试: 28 个
+- ✅ 补充方法测试: 15 个
+- ✅ pygmssl缺失测试: 13 个（性能、压力、边界测试）
+- ✅ 线程安全测试: 10 个（多线程并发测试）
+
+### 线程安全说明
+
+⚠️ **重要**: `Sm4Gcm` 类由于底层 GmSSL 库实现限制，**不是线程安全的**。
+
+如果需要在多线程环境中使用 SM4-GCM，必须使用锁保护：
+
+```python
+import threading
+from gmssl import Sm4Gcm, DO_ENCRYPT
+
+lock = threading.Lock()
+
+def encrypt_with_gcm(key, iv, aad, plaintext):
+    with lock:  # 必须使用锁保护
+        sm4_gcm = Sm4Gcm(key, iv, aad, 16, DO_ENCRYPT)
+        ciphertext = sm4_gcm.update(plaintext)
+        ciphertext += sm4_gcm.finish()
+        return ciphertext
+```
+
+其他所有密码算法（SM2, SM3, SM4-CBC/CTR, SM9, ZUC 等）都是线程安全的，可以在多线程环境中直接使用。
+
+### 修改代码
+
+1. 编辑 `src/gmssl/_core.py` 中的实现代码
+2. 如需更新公共 API，修改 `src/gmssl/__init__.py`
+3. 运行测试验证：`uv run pytest tests/ -v`
+4. 格式化代码：`ruff format src/ tests/`
+5. 检查代码：`ruff check src/ tests/`
+
+### 发布到 PyPI
+
+参考 https://packaging.python.org/distributing/
+
+1. 更新版本号：
+   - `src/gmssl/_core.py` 中的 `GMSSL_PYTHON_VERSION = "x.y.z"`
+   - `pyproject.toml` 中的 `version = "x.y.z"`
+2. 构建包：`python3 -m build`
+3. 发布到 PyPI：`python3 -m twine upload dist/*`
+
+**注意：** 版本号必须在两个文件中保持同步。
 
 
 
@@ -246,7 +377,7 @@ HMAC-SM3是基于SM3密码杂凑算法的消息认证码(MAC)算法，消息认�
 
 模块`gmssl`中包含如下Sm3Hmac的常量：
 
-* `SM3_HMAC_MIN_KEY_SIZE` 
+* `SM3_HMAC_MIN_KEY_SIZE`
 * `SM3_HMAC_MAX_KEY_SIZE`
 * `SM3_HMAC_SIZE` HMAC-SM3密钥长度，与SM3哈希值的长度相等
 
@@ -258,9 +389,9 @@ gmssl.Sm3Hmac(key)
 
 对象Sm3Hmac的方法：
 
-* `Sm3Hmac.update(data : bytes)` 
-* `Sm3Hmac.generate_mac() -> bytes` 
-* `Sm3Hmac.reset()` 
+* `Sm3Hmac.update(data : bytes)`
+* `Sm3Hmac.generate_mac() -> bytes`
+* `Sm3Hmac.reset()`
 
 HMAC-SM3算法可以看作是带密钥的SM3算法，因此在生成`Sm3Hmac`对象时需要传入一个密钥`key`作为输入参数。虽然HMAC-SM3在算法和实现上对密钥长度没有限制，但是出于安全性、效率等方面的考虑，HMAC-SM3算法的密钥长度建议采用32字节（等同于SM3哈希值的长度），不应少于16字节，采用比32字节更长的密钥长度会增加计算开销而不会增加安全性。
 
@@ -286,7 +417,7 @@ HMAC-SM3算法可以看作是带密钥的SM3算法，因此在生成`Sm3Hmac`对
 
 模块`gmssl`中包含如下Sm3Pbkdf2的常量
 
-* `SM3_PBKDF2_MIN_ITER` 
+* `SM3_PBKDF2_MIN_ITER`
 * `SM3_PBKDF2_MAX_ITER`
 * `SM3_PBKDF2_MAX_SALT_SIZE`
 * `SM3_PBKDF2_DEFAULT_SALT_SIZE`
@@ -322,7 +453,7 @@ SM4算法是分组密码算法，其密钥长度为128比特（16字节），分
 
 模块`gmssl`中包含如下SM4的常量
 
-* `SM4_KEY_SIZE` 
+* `SM4_KEY_SIZE`
 * `SM4_BLOCK_SIZE`
 
 `SM4`类实现了基本的SM4分组密码算法，类`SM4`的对象是由构造函数生成的。
@@ -333,7 +464,7 @@ gmssl.Sm4(key, encrypt)
 
 对象SM4的方法：
 
-* `Sm4.encrypt(block : int) -> bytes`  
+* `Sm4.encrypt(block : int) -> bytes`
 
 `Sm4`对象在创建时需要提供`SM4_KEY_SIZE`字节长度的密钥，以及一个布尔值`DO_ENCRYPT`表示是用于加密还是解密。方法`encrypt`根据创建时的选择进行加密或解密，每次调用`encrypt`只处理一个分组，即读入`SM4_BLOCK_SIZE`长度的输入。
 
@@ -357,7 +488,7 @@ CBC模式是应用最广泛的分组密码加密模式之一，虽然目前不�
 
 模块`gmssl`中包含如下Sm4Cbc的常量：
 
-* `SM4_CBC_IV_SIZE` 
+* `SM4_CBC_IV_SIZE`
 
 `Sm4Cbc`类实现了基本的SM4-CBC分组密码算法，类`Sm4Cbc`的对象是由构造函数生成的。
 
@@ -397,7 +528,7 @@ CTR加密模式可以加密任意长度的消息，和CBC模式不同，并不�
 
 模块`gmssl`中包含如下Sm4Ctr的常量：
 
-* `SM4_CTR_IV_SIZE` 
+* `SM4_CTR_IV_SIZE`
 
 `Sm4Ctr`类实现了基本的SM4-CBC分组密码算法，类`Sm4Ctr`的对象是由构造函数生成的。
 
@@ -546,7 +677,7 @@ gmssl.Sm2Key()
 ```python
 >>> sm2 = Sm2Key()
 >>> sm2.generate_key()
->>> 
+>>>
 >>> sm2.export_encrypted_private_key_info_pem('sm2.pem', 'password')
 >>> private_key = Sm2Key()
 >>> private_key.import_encrypted_private_key_info_pem('sm2.pem', 'password')
@@ -908,10 +1039,25 @@ verify.update(message.encode('utf-8'))
 ret = verify.verify(sig, master_pub, signer_id)
 ```
 
+## 许可证
 
+### GmSSL-Python
 
+本项目采用 Apache License 2.0 许可证。详见 [LICENSE](LICENSE) 文件。
 
+### 打包的 GmSSL 库
 
+从 v2.2.2 开始，`gmssl-python` 包含了预编译的 GmSSL 动态库（位于 `src/gmssl/_libs/`）。
 
+**GmSSL 库信息：**
+- **项目**: [GmSSL](https://github.com/guanzhi/GmSSL)
+- **版本**: 3.1.1
+- **许可证**: Apache License 2.0
+- **版权**: Copyright 2014-2023 The GmSSL Project
 
+根据 Apache License 2.0 的条款，我们被允许重新分发 GmSSL 库的二进制文件。GmSSL 库与本项目采用相同的许可证，因此用户可以自由使用、修改和分发。
 
+**重要说明：**
+- 打包的 GmSSL 库仅用于便利性，用户可以选择使用系统安装的 GmSSL 库
+- 系统库（如果存在）将优先于打包的库被加载
+- 如需最新版本或自定义编译的 GmSSL，请参考上述"手动安装 GmSSL"部分

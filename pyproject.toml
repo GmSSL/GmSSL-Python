@@ -21,3 +21,92 @@ classifiers = [
 [project.urls]
 "Homepage" = "https://gmssl.github.io/GmSSL-Python/"
 "Bug Tracker" = "https://github.com/GmSSL/GmSSL-Python/issues"
+
+# Standard Python package structure with src/ layout
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Include bundled GmSSL dynamic libraries in the package
+# This allows pip users to use gmssl_python without installing GmSSL separately
+[tool.setuptools.package-data]
+gmssl = [
+    "_libs/*.dylib",   # macOS
+    "_libs/*.so*",     # Linux (includes .so, .so.3, .so.3.1, etc.)
+    "_libs/*.dll",     # Windows
+]
+
+[tool.uv]
+package = true
+compile-bytecode = true
+concurrent-downloads = 4
+
+[[tool.uv.index]]
+name = "tsinghua"
+url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+
+[dependency-groups]
+dev = [
+    "pip>=24.0",
+    "pre-commit>=2.21.0",
+    "pytest>=7.4.4",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.14.1",
+    "setuptools>=68.0.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+# Enable essential rules - no bullshit, just real problems
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+
+# Ignore rules that conflict with good taste
+ignore = [
+    "E501",  # Line too long - let formatter handle it
+    "N801",  # Class name should use CapWords - ignore for C struct compatibility
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["src/gmssl"]
+omit = []
+
+[tool.coverage.report]
+# Exclude lines with platform-specific code markers
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if sys.platform == .win32.:",  # Windows-specific code
+    "@abstractmethod",
+]
+
+# Show missing lines in coverage report
+show_missing = true
+
+# Fail if coverage is below this threshold (optional)
+ fail_under = 75

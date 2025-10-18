@@ -1,0 +1,591 @@
+name: Build GmSSL Libraries
+
+# This workflow builds GmSSL dynamic libraries for multiple platforms,
+# tests them automatically, and creates a PR to update the bundled libraries.
+#
+# Workflow stages:
+# 1. Build: Compile libraries for Linux (x86_64, aarch64), macOS (universal), Windows (x86_64)
+# 2. Test: Run full test suite on multiple platforms and Python versions
+# 3. PR: Create pull request with updated libraries (only if all tests pass)
+#
+# Trigger manually when you need to update bundled libraries
+
+on:
+  workflow_dispatch:
+    inputs:
+      gmssl_version:
+        description: 'GmSSL version to build (e.g., 3.1.1, master, or commit hash)'
+        required: true
+        default: 'master'
+      gmssl_repo:
+        description: 'GmSSL repository URL'
+        required: true
+        default: 'https://github.com/guanzhi/GmSSL.git'
+      build_platforms:
+        description: 'Platforms to build (comma-separated: linux-x86_64,linux-aarch64,macos,windows or "all")'
+        required: true
+        default: 'all'
+      test_platforms:
+        description: 'Platforms to test (comma-separated: ubuntu-latest,ubuntu-22.04,macos-latest,windows-latest or "all")'
+        required: true
+        default: 'all'
+
+jobs:
+  build-linux-x86_64:
+    name: Build GmSSL for Linux (x86_64)
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.build_platforms == 'all' || contains(github.event.inputs.build_platforms, 'linux-x86_64') }}
+
+    steps:
+      - name: Checkout GmSSL-Python
+        uses: actions/checkout@v4
+
+      - name: Clone GmSSL
+        run: |
+          git clone --depth 1 --branch ${{ github.event.inputs.gmssl_version }} \
+            ${{ github.event.inputs.gmssl_repo }} GmSSL
+
+      - name: Build GmSSL in x86_64 manylinux container
+        run: |
+          # Use manylinux2014 (GLIBC 2.17) for maximum compatibility
+          # This ensures the library works on Ubuntu 14.04+, Debian 8+, RHEL 7+
+          docker run --rm --platform linux/amd64 \
+            -v $PWD/GmSSL:/workspace \
+            -v $PWD/artifacts:/artifacts \
+            quay.io/pypa/manylinux2014_x86_64 \
+            bash -c "
+              yum install -y cmake3 gcc gcc-c++ make file binutils && \
+              ln -sf /usr/bin/cmake3 /usr/bin/cmake && \
+              cd /workspace && \
+              rm -rf build && mkdir build && cd build && \
+              cmake .. -DCMAKE_BUILD_TYPE=Release && \
+              make -j\$(nproc) && \
+              mkdir -p /artifacts/linux-x86_64 && \
+              cp bin/libgmssl.so.3 /artifacts/linux-x86_64/ && \
+              echo '=== Library info ===' && \
+              file /artifacts/linux-x86_64/libgmssl.so.3 && \
+              ldd /artifacts/linux-x86_64/libgmssl.so.3 || true && \
+              ls -lh /artifacts/linux-x86_64/libgmssl.so.3 && \
+              echo '=== GLIBC version requirement ===' && \
+              objdump -T /artifacts/linux-x86_64/libgmssl.so.3 | grep GLIBC | awk '{print \$5}' | sort -Vu && \
+              echo '=== SM3 PBKDF2 symbol check ===' && \
+              if ! nm -D /artifacts/linux-x86_64/libgmssl.so.3 | grep -q sm3_pbkdf2; then \
+                echo 'ERROR: sm3_pbkdf2 symbol not found!'; \
+                exit 1; \
+              fi && \
+              echo 'sm3_pbkdf2 symbol found' && \
+              echo '=== SM9 symbols check ===' && \
+              nm -D /artifacts/linux-x86_64/libgmssl.so.3 | grep -i sm9_sign | head -5 || echo 'No SM9 symbols found'
+            "
+
+      - name: Verify library
+        run: |
+          file artifacts/linux-x86_64/libgmssl.so.3
+          ls -lh artifacts/linux-x86_64/libgmssl.so.3
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gmssl-linux-x86_64
+          path: artifacts/linux-x86_64/libgmssl.so.3
+          retention-days: 7
+
+  build-linux-aarch64:
+    name: Build GmSSL for Linux (aarch64)
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.build_platforms == 'all' || contains(github.event.inputs.build_platforms, 'linux-aarch64') }}
+
+    steps:
+      - name: Checkout GmSSL-Python
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Clone GmSSL
+        run: |
+          git clone --depth 1 --branch ${{ github.event.inputs.gmssl_version }} \
+            ${{ github.event.inputs.gmssl_repo }} GmSSL
+
+      - name: Build GmSSL in ARM64 manylinux container
+        run: |
+          # Use manylinux2014 (GLIBC 2.17) for maximum compatibility
+          docker run --rm --platform linux/arm64 \
+            -v $PWD/GmSSL:/workspace \
+            -v $PWD/artifacts:/artifacts \
+            quay.io/pypa/manylinux2014_aarch64 \
+            bash -c "
+              yum install -y gcc gcc-c++ make file binutils && \
+              cmake --version && \
+              cd /workspace && \
+              rm -rf build && mkdir build && cd build && \
+              cmake .. -DCMAKE_BUILD_TYPE=Release && \
+              make -j\$(nproc) && \
+              mkdir -p /artifacts/linux-aarch64 && \
+              cp bin/libgmssl.so.3 /artifacts/linux-aarch64/ && \
+              echo '=== Library info ===' && \
+              file /artifacts/linux-aarch64/libgmssl.so.3 && \
+              ldd /artifacts/linux-aarch64/libgmssl.so.3 || true && \
+              ls -lh /artifacts/linux-aarch64/libgmssl.so.3 && \
+              echo '=== GLIBC version requirement ===' && \
+              objdump -T /artifacts/linux-aarch64/libgmssl.so.3 | grep GLIBC | awk '{print \$5}' | sort -Vu && \
+              echo '=== SM3 PBKDF2 symbol check ===' && \
+              if ! nm -D /artifacts/linux-aarch64/libgmssl.so.3 | grep -q sm3_pbkdf2; then \
+                echo 'ERROR: sm3_pbkdf2 symbol not found!'; \
+                exit 1; \
+              fi && \
+              echo 'sm3_pbkdf2 symbol found' && \
+              echo '=== SM9 symbols check ===' && \
+              nm -D /artifacts/linux-aarch64/libgmssl.so.3 | grep -i sm9_sign | head -5 || echo 'No SM9 symbols found'
+            "
+
+      - name: Verify library
+        run: |
+          file artifacts/linux-aarch64/libgmssl.so.3
+          ls -lh artifacts/linux-aarch64/libgmssl.so.3
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gmssl-linux-aarch64
+          path: artifacts/linux-aarch64/libgmssl.so.3
+          retention-days: 7
+
+  build-macos-arm64:
+    name: Build GmSSL for macOS (arm64)
+    runs-on: macos-latest
+    if: ${{ github.event.inputs.build_platforms == 'all' || contains(github.event.inputs.build_platforms, 'macos') }}
+
+    steps:
+      - name: Checkout GmSSL-Python
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          brew install cmake
+
+      - name: Clone GmSSL
+        run: |
+          git clone --depth 1 --branch ${{ github.event.inputs.gmssl_version }} \
+            ${{ github.event.inputs.gmssl_repo }} GmSSL
+
+      - name: Build GmSSL
+        run: |
+          cd GmSSL
+          mkdir build && cd build
+          cmake .. \
+                   -DCMAKE_BUILD_TYPE=Release \
+                   -DCMAKE_OSX_ARCHITECTURES=arm64 \
+                   -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Copy library
+        run: |
+          mkdir -p artifacts/macos-arm64
+          cp GmSSL/build/bin/libgmssl.3.dylib artifacts/macos-arm64/
+
+          # Verify library (NO STRIP - debugging CI issues)
+          echo "=== Library info ==="
+          file artifacts/macos-arm64/libgmssl.3.dylib
+          otool -L artifacts/macos-arm64/libgmssl.3.dylib
+          ls -lh artifacts/macos-arm64/libgmssl.3.dylib
+
+          echo "=== SM9 symbols check ==="
+          nm -g artifacts/macos-arm64/libgmssl.3.dylib | grep -i sm9_sign | head -5 || echo "No SM9 symbols found"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gmssl-macos-arm64
+          path: artifacts/macos-arm64/libgmssl.3.dylib
+          retention-days: 7
+
+  build-macos-x86_64:
+    name: Build GmSSL for macOS (x86_64)
+    runs-on: macos-13  # Intel-based runner
+    if: ${{ github.event.inputs.build_platforms == 'all' || contains(github.event.inputs.build_platforms, 'macos') }}
+
+    steps:
+      - name: Checkout GmSSL-Python
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          brew install cmake
+
+      - name: Clone GmSSL
+        run: |
+          git clone --depth 1 --branch ${{ github.event.inputs.gmssl_version }} \
+            ${{ github.event.inputs.gmssl_repo }} GmSSL
+
+      - name: Build GmSSL
+        run: |
+          cd GmSSL
+          mkdir build && cd build
+          cmake .. \
+                   -DCMAKE_BUILD_TYPE=Release \
+                   -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+                   -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Copy library
+        run: |
+          mkdir -p artifacts/macos-x86_64
+          cp GmSSL/build/bin/libgmssl.3.dylib artifacts/macos-x86_64/
+
+          # Verify library (NO STRIP - debugging CI issues)
+          echo "=== Library info ==="
+          file artifacts/macos-x86_64/libgmssl.3.dylib
+          otool -L artifacts/macos-x86_64/libgmssl.3.dylib
+          ls -lh artifacts/macos-x86_64/libgmssl.3.dylib
+
+          echo "=== SM9 symbols check ==="
+          nm -g artifacts/macos-x86_64/libgmssl.3.dylib | grep -i sm9_sign | head -5 || echo "No SM9 symbols found"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gmssl-macos-x86_64
+          path: artifacts/macos-x86_64/libgmssl.3.dylib
+          retention-days: 7
+
+  build-windows:
+    name: Build GmSSL for Windows (x86_64)
+    runs-on: windows-latest
+    if: ${{ github.event.inputs.build_platforms == 'all' || contains(github.event.inputs.build_platforms, 'windows') }}
+
+    steps:
+      - name: Checkout GmSSL-Python
+        uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Clone GmSSL
+        run: |
+          git clone --depth 1 --branch ${{ github.event.inputs.gmssl_version }} `
+            ${{ github.event.inputs.gmssl_repo }} GmSSL
+
+      - name: Build GmSSL
+        run: |
+          cd GmSSL
+          mkdir build
+          cd build
+          cmake .. -A x64
+          cmake --build . --config Release
+
+      - name: Copy library
+        run: |
+          mkdir -p artifacts/windows-x86_64
+          cp GmSSL/build/bin/Release/gmssl.dll artifacts/windows-x86_64/
+
+          # Verify library exists
+          ls -l artifacts/windows-x86_64/gmssl.dll
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gmssl-windows-x86_64
+          path: artifacts/windows-x86_64/gmssl.dll
+          retention-days: 7
+
+  create-macos-universal:
+    name: Create macOS Universal Binary
+    needs: [build-macos-arm64, build-macos-x86_64]
+    runs-on: macos-latest
+    if: ${{ always() && (github.event.inputs.build_platforms == 'all' || contains(github.event.inputs.build_platforms, 'macos')) && !cancelled() && !contains(needs.*.result, 'failure') }}
+
+    steps:
+      - name: Download arm64 library
+        uses: actions/download-artifact@v4
+        with:
+          name: gmssl-macos-arm64
+          path: macos-arm64
+
+      - name: Download x86_64 library
+        uses: actions/download-artifact@v4
+        with:
+          name: gmssl-macos-x86_64
+          path: macos-x86_64
+
+      - name: Create universal binary
+        run: |
+          mkdir -p artifacts/macos-universal
+          lipo -create \
+            macos-arm64/libgmssl.3.dylib \
+            macos-x86_64/libgmssl.3.dylib \
+            -output artifacts/macos-universal/libgmssl.3.dylib
+
+          # Verify
+          file artifacts/macos-universal/libgmssl.3.dylib
+          lipo -info artifacts/macos-universal/libgmssl.3.dylib
+
+      - name: Upload universal binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: gmssl-macos-universal
+          path: artifacts/macos-universal/libgmssl.3.dylib
+          retention-days: 7
+
+  test-libraries:
+    name: Test libraries on ${{ matrix.os }} with Python ${{ matrix.python-version }}
+    needs: [build-linux-x86_64, build-linux-aarch64, create-macos-universal, build-windows]
+    runs-on: ${{ matrix.os }}
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') }}
+
+    strategy:
+      fail-fast: false  # Continue testing other combinations even if one fails
+      matrix:
+        os: [ubuntu-latest, ubuntu-22.04, macos-latest, windows-latest]
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        exclude:
+          # Only test all Python versions on ubuntu-latest to save CI time
+          # ubuntu-22.04 tests Python 3.8 and 3.12 (LTS compatibility check)
+          - os: ubuntu-22.04
+            python-version: '3.9'
+          - os: ubuntu-22.04
+            python-version: '3.10'
+          - os: ubuntu-22.04
+            python-version: '3.11'
+          # macOS and Windows only test latest Python
+          - os: macos-latest
+            python-version: '3.8'
+          - os: macos-latest
+            python-version: '3.9'
+          - os: macos-latest
+            python-version: '3.10'
+          - os: macos-latest
+            python-version: '3.11'
+          - os: windows-latest
+            python-version: '3.8'
+          - os: windows-latest
+            python-version: '3.9'
+          - os: windows-latest
+            python-version: '3.10'
+          - os: windows-latest
+            python-version: '3.11'
+
+    steps:
+      - name: Check if platform should be tested
+        id: check_platform
+        run: |
+          if [ "${{ github.event.inputs.test_platforms }}" = "all" ] || echo "${{ github.event.inputs.test_platforms }}" | grep -q "${{ matrix.os }}"; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            echo "Skipping ${{ matrix.os }} - not in test_platforms"
+          fi
+        shell: bash
+
+      - name: Checkout GmSSL-Python
+        if: steps.check_platform.outputs.should_run == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        if: steps.check_platform.outputs.should_run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download Linux x86_64 library
+        if: steps.check_platform.outputs.should_run == 'true' && matrix.os == 'ubuntu-latest'
+        uses: actions/download-artifact@v4
+        with:
+          name: gmssl-linux-x86_64
+          path: src/gmssl/_libs
+
+      - name: Rename Linux x86_64 library
+        if: steps.check_platform.outputs.should_run == 'true' && matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          mv src/gmssl/_libs/libgmssl.so.3 src/gmssl/_libs/libgmssl.so.3.x86_64
+
+      - name: Download Linux x86_64 library (Ubuntu 22.04)
+        if: steps.check_platform.outputs.should_run == 'true' && matrix.os == 'ubuntu-22.04'
+        uses: actions/download-artifact@v4
+        with:
+          name: gmssl-linux-x86_64
+          path: src/gmssl/_libs
+
+      - name: Rename Linux x86_64 library (Ubuntu 22.04)
+        if: steps.check_platform.outputs.should_run == 'true' && matrix.os == 'ubuntu-22.04'
+        shell: bash
+        run: |
+          mv src/gmssl/_libs/libgmssl.so.3 src/gmssl/_libs/libgmssl.so.3.x86_64
+
+      - name: Download macOS universal library
+        if: steps.check_platform.outputs.should_run == 'true' && matrix.os == 'macos-latest'
+        uses: actions/download-artifact@v4
+        with:
+          name: gmssl-macos-universal
+          path: src/gmssl/_libs
+
+      - name: Download Windows library
+        if: steps.check_platform.outputs.should_run == 'true' && matrix.os == 'windows-latest'
+        uses: actions/download-artifact@v4
+        with:
+          name: gmssl-windows-x86_64
+          path: src/gmssl/_libs
+
+      - name: Verify library files
+        if: steps.check_platform.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          echo "=== Library files in src/gmssl/_libs/ ==="
+          ls -lh src/gmssl/_libs/ || true
+
+          # Verify library architecture and symbols
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ] || [ "${{ matrix.os }}" = "ubuntu-22.04" ]; then
+            echo "=== Linux library info ==="
+            file src/gmssl/_libs/libgmssl.so.3.x86_64
+            ldd src/gmssl/_libs/libgmssl.so.3.x86_64 || true
+            echo "=== GLIBC requirement ==="
+            objdump -T src/gmssl/_libs/libgmssl.so.3.x86_64 | grep GLIBC | awk '{print $5}' | sort -Vu
+            echo "=== SM3 PBKDF2 symbol check ==="
+            nm -D src/gmssl/_libs/libgmssl.so.3.x86_64 | grep sm3_pbkdf2 || echo "WARNING: sm3_pbkdf2 not found"
+            echo "=== SM9 symbols check ==="
+            nm -D src/gmssl/_libs/libgmssl.so.3.x86_64 | grep -i sm9_sign | head -5 || echo "No SM9 symbols found"
+          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
+            echo "=== macOS library info ==="
+            file src/gmssl/_libs/libgmssl.3.dylib
+            lipo -info src/gmssl/_libs/libgmssl.3.dylib
+            otool -L src/gmssl/_libs/libgmssl.3.dylib
+            echo "=== SM9 symbols check ==="
+            nm -g src/gmssl/_libs/libgmssl.3.dylib | grep -i sm9_sign | head -5 || echo "No SM9 symbols found"
+          elif [ "${{ matrix.os }}" = "windows-latest" ]; then
+            echo "=== Windows library info ==="
+            file src/gmssl/_libs/gmssl.dll || ls -l src/gmssl/_libs/gmssl.dll
+          fi
+
+      - name: Install dependencies
+        if: steps.check_platform.outputs.should_run == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+
+      - name: Install package in development mode
+        if: steps.check_platform.outputs.should_run == 'true'
+        run: pip install -e .
+
+      - name: Verify installation
+        if: steps.check_platform.outputs.should_run == 'true'
+        shell: bash
+        run: |
+          echo "=== System info ==="
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ] || [ "${{ matrix.os }}" = "ubuntu-22.04" ]; then
+            echo "OS: $(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"')"
+            echo "GLIBC: $(ldd --version | head -1)"
+          fi
+
+          echo ""
+          echo "=== Python and library info ==="
+          python --version
+          python -c "import sys; print(f'Python: {sys.version}')"
+          python -c "from gmssl import GMSSL_LIBRARY_VERSION, GMSSL_PYTHON_VERSION; print(f'GmSSL Library: {GMSSL_LIBRARY_VERSION}'); print(f'Python Binding: {GMSSL_PYTHON_VERSION}')"
+
+          echo ""
+          echo "=== Loaded library path ==="
+          python -c "import gmssl._lib as lib; import ctypes.util; print(f'System library: {ctypes.util.find_library(\"gmssl\")}'); print(f'Using library: {lib.gmssl._name}')"
+
+      - name: Run tests
+        if: steps.check_platform.outputs.should_run == 'true'
+        run: pytest tests/ -v -s --tb=short
+
+      - name: Run SM9 tests separately with debug
+        if: steps.check_platform.outputs.should_run == 'true' && always()
+        shell: bash
+        run: |
+          echo "=== Running SM9 tests with verbose output ==="
+          pytest tests/test_gmssl.py::test_sm9_enc_decrypt tests/test_gmssl.py::test_sm9_sign_verify -v -s --tb=long || echo "SM9 tests failed"
+
+  create-pr:
+    name: Create PR with updated libraries
+    needs: [test-libraries]
+    runs-on: ubuntu-latest
+    # Only create PR when all platforms are built and tested
+    if: ${{ github.event.inputs.build_platforms == 'all' && github.event.inputs.test_platforms == 'all' }}
+
+    steps:
+      - name: Checkout GmSSL-Python
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded-libs
+
+      - name: Organize libraries
+        run: |
+          mkdir -p src/gmssl/_libs
+
+          # Linux x86_64
+          cp downloaded-libs/gmssl-linux-x86_64/libgmssl.so.3 src/gmssl/_libs/libgmssl.so.3.x86_64
+
+          # Linux aarch64
+          cp downloaded-libs/gmssl-linux-aarch64/libgmssl.so.3 src/gmssl/_libs/libgmssl.so.3.aarch64
+
+          # macOS universal binary (already created by create-macos-universal job)
+          cp downloaded-libs/gmssl-macos-universal/libgmssl.3.dylib src/gmssl/_libs/
+
+          # Windows
+          cp downloaded-libs/gmssl-windows-x86_64/gmssl.dll src/gmssl/_libs/
+
+          # List files with architecture info
+          echo "=== Bundled Libraries ==="
+          ls -lh src/gmssl/_libs/
+          echo ""
+          echo "=== Architecture Verification ==="
+          file src/gmssl/_libs/libgmssl.so.3.x86_64 || true
+          file src/gmssl/_libs/libgmssl.so.3.aarch64 || true
+          file src/gmssl/_libs/libgmssl.3.dylib || true
+          file src/gmssl/_libs/gmssl.dll || true
+
+          # Clean up temporary directory (should not be committed)
+          rm -rf downloaded-libs
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: |
+            chore: update bundled GmSSL libraries to ${{ github.event.inputs.gmssl_version }}
+
+            - Linux x86_64: libgmssl.so.3.x86_64
+            - Linux aarch64: libgmssl.so.3.aarch64
+            - macOS universal: libgmssl.3.dylib (arm64 + x86_64)
+            - Windows x86_64: gmssl.dll
+
+            Built from: ${{ github.event.inputs.gmssl_repo }}
+            Version: ${{ github.event.inputs.gmssl_version }}
+          branch: update-gmssl-libs-${{ github.event.inputs.gmssl_version }}
+          delete-branch: true
+          title: 'chore: update bundled GmSSL libraries to ${{ github.event.inputs.gmssl_version }}'
+          body: |
+            ## Update Bundled GmSSL Libraries
+
+            This PR updates the bundled GmSSL dynamic libraries to version **${{ github.event.inputs.gmssl_version }}**.
+
+            ### Changes
+            - ✅ Linux x86_64: `libgmssl.so.3.x86_64`
+            - ✅ Linux aarch64: `libgmssl.so.3.aarch64`
+            - ✅ macOS universal: `libgmssl.3.dylib` (arm64 + x86_64)
+            - ✅ Windows x86_64: `gmssl.dll`
+
+            ### Build Information
+            - **Source**: ${{ github.event.inputs.gmssl_repo }}
+            - **Version**: ${{ github.event.inputs.gmssl_version }}
+            - **Built by**: GitHub Actions workflow
+
+            ### Testing Checklist
+            - [ ] All tests pass on Linux x86_64
+            - [ ] All tests pass on Linux aarch64
+            - [ ] All tests pass on macOS (arm64)
+            - [ ] All tests pass on macOS (x86_64)
+            - [ ] All tests pass on Windows
+            - [ ] Wheel package includes all libraries
+            - [ ] Library loading priority works correctly (system > bundled)
+
+            ### License
+            GmSSL is licensed under Apache-2.0, same as this project.
+            Redistribution is permitted under the terms of the Apache License 2.0.

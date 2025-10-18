@@ -5,6 +5,8 @@ __pycache__/
 
 # C extensions
 *.so
+# But allow bundled GmSSL libraries
+!src/gmssl/_libs/*.so*
 
 # Distribution / packaging
 .Python
@@ -129,3 +131,5 @@ dmypy.json
 .pyre/
 *.pem
 .DS_Store
+
+.idea/

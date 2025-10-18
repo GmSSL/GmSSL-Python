@@ -1,0 +1,53 @@
+default_language_version:
+  python: "3.12"
+
+repos:
+  # Conventional commits enforcement
+  - repo: https://gitee.com/ferstar/conventional-pre-commit.git
+    rev: v3.6.0
+    hooks:
+      - id: conventional-pre-commit
+        args:
+          - "--verbose"
+        stages: [commit-msg]
+
+  # Basic file checks
+  - repo: https://gitee.com/ferstar/pre-commit-hooks.git
+    rev: v5.0.0
+    hooks:
+      - id: check-ast
+      - id: check-case-conflict
+      - id: check-toml
+      - id: debug-statements
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+
+  # Local hooks for Python code quality
+  - repo: local
+    hooks:
+      # Ruff formatter
+      - id: ruff-format
+        name: ruff-format
+        entry: ruff format --no-cache
+        language: system
+        types: [python]
+        description: "Ruff code formatter"
+
+      # Ruff linter
+      - id: ruff
+        name: ruff
+        description: "Ruff code checker"
+        entry: ruff check --force-exclude --no-cache
+        args: [--fix, --exit-non-zero-on-fix]
+        language: system
+        types: [python]
+
+      # Run tests on pre-push
+      - id: pytest
+        name: pytest
+        entry: pytest -q --tb=short
+        language: system
+        stages: [pre-push]
+        pass_filenames: false
+        verbose: true
