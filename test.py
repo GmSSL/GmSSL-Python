@@ -18,6 +18,11 @@ class TestGmSSL(unittest.TestCase):
 		self.assertTrue(len(GMSSL_LIBRARY_VERSION) > 0)
 		self.assertTrue(len(GMSSL_PYTHON_VERSION) > 0)
 
+	def test_sm2_struct_sizes(self):
+		self.assertEqual(sizeof(Sm2Point), 96)
+		self.assertEqual(sizeof(Sm2Key), 128)
+		self.assertEqual(sizeof(Sm2Signature), 3976)
+
 	def test_rand(self):
 		keylen = 20
 		key = rand_bytes(keylen)
@@ -229,4 +234,3 @@ pDoiVhsLwg==
 
 if __name__ == '__main__':
 	unittest.main()
-

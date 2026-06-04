@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            os: ubuntu-latest
+            python-version: "3.12"
+          - name: macOS ARM64
+            os: macos-latest
+            python-version: "3.12"
+          - name: Windows x64
+            os: windows-latest
+            python-version: "3.12"
+
+    steps:
+      - name: Checkout GmSSL-Python
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Checkout GmSSL
+        uses: actions/checkout@v4
+        with:
+          repository: guanzhi/GmSSL
+          path: GmSSL
+
+      - name: Build and install GmSSL on Linux
+        if: runner.os == 'Linux'
+        run: |
+          cmake -S GmSSL -B GmSSL/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build GmSSL/build --parallel 2
+          sudo cmake --install GmSSL/build
+          sudo ldconfig
+
+      - name: Build and install GmSSL on macOS
+        if: runner.os == 'macOS'
+        run: |
+          cmake -S GmSSL -B GmSSL/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build GmSSL/build --parallel 2
+          sudo cmake --install GmSSL/build
+          echo "DYLD_LIBRARY_PATH=/usr/local/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
+
+      - name: Build GmSSL on Windows
+        if: runner.os == 'Windows'
+        run: |
+          cmake -S GmSSL -B GmSSL\build -A x64 -DCMAKE_BUILD_TYPE=Release
+          cmake --build GmSSL\build --config Release --parallel 2
+          $dll = Get-ChildItem -Path GmSSL\build -Filter gmssl.dll -Recurse | Select-Object -First 1
+          if (-not $dll) { throw "gmssl.dll was not built" }
+          $dll.Directory.FullName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install package
+        run: python -m pip install .
+
+      - name: Verify library loading
+        run: python -c "import gmssl; print(gmssl.GMSSL_LIBRARY_VERSION); print(gmssl.GMSSL_PYTHON_VERSION)"
+
+      - name: Run tests
+        run: python -m unittest -v

@@ -133,7 +133,12 @@ def sm3_pbkdf2(passwd, salt, iterator, keylen):
 	passwd = passwd.encode('utf-8')
 	key = create_string_buffer(keylen)
 
-	if gmssl.pbkdf2_hmac_sm3_genkey(c_char_p(passwd), c_size_t(len(passwd)),
+	try:
+		pbkdf2_func = gmssl.pbkdf2_hmac_sm3_genkey
+	except AttributeError:
+		pbkdf2_func = gmssl.sm3_pbkdf2
+
+	if pbkdf2_func(c_char_p(passwd), c_size_t(len(passwd)),
 		salt, c_size_t(len(salt)), c_size_t(iterator), c_size_t(keylen), key) != 1:
 		raise NativeError('libgmssl inner error')
 
@@ -387,8 +392,9 @@ SM2_MAX_CIPHERTEXT_SIZE = 366
 
 class Sm2Point(Structure):
 	_fields_ = [
-		("x", c_uint8 * 32),
-		("y", c_uint8 * 32)
+		("x", c_uint64 * 4),
+		("y", c_uint64 * 4),
+		("z", c_uint64 * 4)
 	]
 
 
@@ -509,11 +515,24 @@ DO_DECRYPT = False
 DO_SIGN = True
 DO_VERIFY = False
 
+class Sm2SignPreComp(Structure):
+
+	_fields_ = [
+		("k", c_uint64 * 4),
+		("x1_modn", c_uint64 * 4)
+	]
+
+
 class Sm2Signature(Structure):
 
 	_fields_ = [
 		("sm3_ctx", Sm3),
-		("key", Sm2Key)
+		("saved_sm3_ctx", Sm3),
+		("key", Sm2Key),
+		("fast_sign_private", c_uint64 * 4),
+		("pre_comp", Sm2SignPreComp * 32),
+		("num_pre_comp", c_uint),
+		("public_point_table", Sm2Point * 16)
 	]
 
 	def __init__(self, sm2_key, signer_id = SM2_DEFAULT_ID, sign = DO_SIGN):
@@ -1037,5 +1056,3 @@ class Sm2Certificate:
 			cacert_raw, c_size_t(len(cacert_raw)), c_char_p(sm2_id), c_size_t(len(sm2_id))) != 1:
 			return False
 		return True
-
-
