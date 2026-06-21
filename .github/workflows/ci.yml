@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-14]
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install build dependencies
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y build-essential cmake
+          else
+            brew install cmake
+          fi
+
+      - name: Build and install GmSSL v3.2.0
+        run: |
+          git clone --depth 1 --branch v3.2.0 https://github.com/guanzhi/GmSSL.git "$RUNNER_TEMP/GmSSL"
+          cmake -S "$RUNNER_TEMP/GmSSL" -B "$RUNNER_TEMP/GmSSL/build" \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$RUNNER_TEMP/GmSSL/build" --parallel 4
+          sudo cmake --install "$RUNNER_TEMP/GmSSL/build"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo ldconfig
+          fi
+
+      - name: Run tests
+        env:
+          LD_LIBRARY_PATH: /usr/local/lib
+          DYLD_LIBRARY_PATH: /usr/local/lib
+        run: python -m unittest -v

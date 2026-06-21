@@ -133,7 +133,7 @@ def sm3_pbkdf2(passwd, salt, iterator, keylen):
 	passwd = passwd.encode('utf-8')
 	key = create_string_buffer(keylen)
 
-	if gmssl.pbkdf2_hmac_sm3_genkey(c_char_p(passwd), c_size_t(len(passwd)),
+	if gmssl.sm3_pbkdf2(c_char_p(passwd), c_size_t(len(passwd)),
 		salt, c_size_t(len(salt)), c_size_t(iterator), c_size_t(keylen), key) != 1:
 		raise NativeError('libgmssl inner error')
 
@@ -328,7 +328,8 @@ class Sm4Gcm(Structure):
 		("Y", c_uint8 * 16),
 		("taglen", c_size_t),
 		("mac", c_uint8 * 16),
-		("maclen", c_size_t)
+		("maclen", c_size_t),
+		("encedlen", c_uint64)
 	]
 
 	def __init__(self, key, iv, aad, taglen = SM4_GCM_DEFAULT_TAG_SIZE, encrypt = True):
@@ -387,8 +388,9 @@ SM2_MAX_CIPHERTEXT_SIZE = 366
 
 class Sm2Point(Structure):
 	_fields_ = [
-		("x", c_uint8 * 32),
-		("y", c_uint8 * 32)
+		("X", c_uint64 * 4),
+		("Y", c_uint64 * 4),
+		("Z", c_uint64 * 4)
 	]
 
 
@@ -396,7 +398,7 @@ class Sm2Key(Structure):
 
 	_fields_ = [
 		("public_key", Sm2Point),
-		("private_key", c_uint8 * 32)
+		("private_key", c_uint64 * 4)
 	]
 
 	def __init__(self):
@@ -503,17 +505,61 @@ class Sm2Key(Structure):
 			raise NativeError('libgmssl inner error')
 		return outbuf[:outlen.value]
 
+class X509Key(Structure):
+
+	_fields_ = [
+		("algor", c_int),
+		("algor_param", c_int),
+		("sm2_key", Sm2Key),
+		("_padding", c_uint8 * 20000)
+	]
+
 
 DO_ENCRYPT = True
 DO_DECRYPT = False
 DO_SIGN = True
 DO_VERIFY = False
 
-class Sm2Signature(Structure):
+class Sm2Z256Point(Structure):
+
+	_fields_ = [
+		("X", c_uint64 * 4),
+		("Y", c_uint64 * 4),
+		("Z", c_uint64 * 4)
+	]
+
+class Sm2SignPreComp(Structure):
+
+	_fields_ = [
+		("k", c_uint64 * 4),
+		("x1_modn", c_uint64 * 4)
+	]
+
+class Sm2Sign(Structure):
 
 	_fields_ = [
 		("sm3_ctx", Sm3),
-		("key", Sm2Key)
+		("saved_sm3_ctx", Sm3),
+		("key", Sm2Key),
+		("fast_sign_private", c_uint64 * 4),
+		("pre_comp", Sm2SignPreComp * 32),
+		("num_pre_comp", c_uint),
+		("public_point_table", Sm2Z256Point * 16)
+	]
+
+class Sm2Verify(Structure):
+
+	_fields_ = [
+		("sm3_ctx", Sm3),
+		("saved_sm3_ctx", Sm3),
+		("key", Sm2Key),
+		("public_point_table", Sm2Z256Point * 16)
+	]
+
+class Sm2Signature(Structure):
+
+	_fields_ = [
+		("ctx", Sm2Sign)
 	]
 
 	def __init__(self, sm2_key, signer_id = SM2_DEFAULT_ID, sign = DO_SIGN):
@@ -559,7 +605,7 @@ class Sm2Signature(Structure):
 
 class sm9_bn_t(Structure):
 	_fields_ = [
-		("d", c_uint64 * 8)
+		("d", c_uint64 * 4)
 	]
 
 class sm9_fp2_t(Structure):
@@ -1013,7 +1059,11 @@ class Sm2Certificate:
 
 	def get_subject_public_key(self):
 		public_key = Sm2Key()
-		gmssl.x509_cert_get_subject_public_key(self._cert, c_size_t(len(self._cert)), byref(public_key))
+		x509_key = X509Key()
+		if gmssl.x509_cert_get_subject_public_key(self._cert, c_size_t(len(self._cert)), byref(x509_key)) != 1:
+			raise NativeError('libgmssl inner error')
+		public_key.public_key = x509_key.sm2_key.public_key
+		public_key.private_key = x509_key.sm2_key.private_key
 		public_key._has_private_key = False
 		public_key._has_public_key = True
 		return public_key
@@ -1037,5 +1087,3 @@ class Sm2Certificate:
 			cacert_raw, c_size_t(len(cacert_raw)), c_char_p(sm2_id), c_size_t(len(sm2_id))) != 1:
 			return False
 		return True
-
-
