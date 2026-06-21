@@ -511,7 +511,7 @@ class X509Key(Structure):
 		("algor", c_int),
 		("algor_param", c_int),
 		("sm2_key", Sm2Key),
-		("_padding", c_uint8 * 20000)
+		("_padding", c_uint8 * 1048576)
 	]
 
 
